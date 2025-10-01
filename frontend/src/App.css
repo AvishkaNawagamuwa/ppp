@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .bg-gold-500 {
+    background-color: #D4AF37;
+  }
+  
+  .bg-gold-600 {
+    background-color: #B8860B;
+  }
+  
+  .text-gold-500 {
+    color: #D4AF37;
+  }
+  
+  .border-gold-500 {
+    border-color: #D4AF37;
+  }
+  
+  .bg-[#0A1428] {
+    background-color: #0A1428;
+  }
+  
+  .bg-gold-100 {
+    background-color: #FDF6E3;
+  }
+  
+  .text-gold-600 {
+    color: #B8860B;
+  }
+}
+
+/* Custom animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Smooth transitions for all elements */
+* {
+  transition-property: color, background-color, border-color, transform, opacity, width;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 300ms;
+}
+
