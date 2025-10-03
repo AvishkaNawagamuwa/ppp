@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import {
     FiLock,
     FiMapPin,
+    FiPhone,
+    FiMail,
     FiClock,
-    FiSettings,
     FiImage,
     FiUser,
     FiCheck,
@@ -11,11 +12,12 @@ import {
     FiShield,
     FiSave,
     FiUpload,
-    FiX
+    FiX,
+    FiSettings
 } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 
-const SpaSettings = () => {
+const SpaProfile = () => {
     const [operatingHours, setOperatingHours] = useState({
         monday: { open: '09:00', close: '18:00', closed: false },
         tuesday: { open: '09:00', close: '18:00', closed: false },
@@ -316,4 +318,4 @@ const SpaSettings = () => {
     );
 };
 
-export default SpaSettings;
+export default SpaProfile;

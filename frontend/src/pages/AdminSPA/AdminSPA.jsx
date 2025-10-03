@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+﻿import React, { useState, useRef, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import {
     FiHome,
@@ -9,37 +9,279 @@ import {
     FiSettings,
     FiLogOut,
     FiMenu,
-    FiChevronLeft
+    FiChevronLeft,
+    FiCamera,
+    FiUpload,
+    FiX
 } from 'react-icons/fi';
 import assets from '../../assets/images/images';
 
 // Import components
 import Dashboard from './Dashboard';
 import PaymentPlans from './PaymentPlans';
-import SpaSettings from './SpaSettings';
+import SpaProfile from './SpaProfile';
 
 // AddTherapist Component with NNF Flow
 const AddTherapist = () => {
     const [currentStep, setCurrentStep] = useState(1);
     const [formData, setFormData] = useState({
-        firstName: '', lastName: '', nic: '', phone: '', email: '', address: '', experience: ''
+        firstName: '', lastName: '', birthday: '', nic: '', phone: ''
     });
+    const [attachments, setAttachments] = useState({
+        nicFile: null, medicalFile: null, certificateFile: null, imageFile: null
+    });
+    const [pendingTherapists, setPendingTherapists] = useState([]);
+    const [selectedForBulk, setSelectedForBulk] = useState([]);
+
+    // Camera-specific state for Therapist Image
+    const [showCamera, setShowCamera] = useState(false);
+    const [imagePreview, setImagePreview] = useState(null);
+    const [cameraStream, setCameraStream] = useState(null);
+    const [cameraLoading, setCameraLoading] = useState(false);
+    const videoRef = useRef(null);
+    const canvasRef = useRef(null);
+    const fileInputRef = useRef(null);
 
     const nextStep = () => currentStep < 3 && setCurrentStep(currentStep + 1);
     const prevStep = () => currentStep > 1 && setCurrentStep(currentStep - 1);
+
+    const handleInputChange = (e) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+    };
+
+    const handleFileChange = (e, type) => {
+        const file = e.target.files[0];
+        if (file && ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
+            if (type === 'imageFile') {
+                // Special handling for image file with preview
+                if (file.size > 5 * 1024 * 1024) { // 5MB limit
+                    Swal.fire({
+                        title: 'File Too Large',
+                        text: 'Please select an image under 5MB',
+                        icon: 'error',
+                        confirmButtonColor: '#0A1428'
+                    });
+                    return;
+                }
+                setAttachments({ ...attachments, [type]: file });
+                const reader = new FileReader();
+                reader.onload = (e) => setImagePreview(e.target.result);
+                reader.readAsDataURL(file);
+            } else {
+                setAttachments({ ...attachments, [type]: file });
+            }
+        } else {
+            Swal.fire({
+                title: 'Invalid File',
+                text: 'Please select a valid file (PDF, PNG, JPG)',
+                icon: 'error',
+                confirmButtonColor: '#0A1428'
+            });
+        }
+    };
+
+    // WhatsApp-like instant camera connection
+    const startCamera = async () => {
+        setCameraLoading(true);
+        try {
+            // Minimal constraints for maximum speed
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            setCameraStream(stream);
+            setShowCamera(true);
+
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+                // Use oncanplay for immediate rendering - faster than onloadedmetadata
+                videoRef.current.oncanplay = () => {
+                    requestAnimationFrame(() => {
+                        videoRef.current.play().catch(err => console.warn('Autoplay prevented:', err));
+                        setCameraLoading(false);
+                    });
+                };
+
+                // Timeout fallback for slow connections
+                setTimeout(() => {
+                    if (cameraLoading) {
+                        setCameraLoading(false);
+                        Swal.fire({
+                            title: 'Camera Starting Slowly',
+                            text: 'Camera is taking longer than expected. Check permissions or use upload instead.',
+                            icon: 'info',
+                            confirmButtonColor: '#0A1428'
+                        });
+                    }
+                }, 2000);
+            }
+        } catch (err) {
+            console.error('Camera init failed:', err);
+            setCameraLoading(false);
+            setShowCamera(false);
+            Swal.fire({
+                title: 'Camera Access Denied',
+                text: 'Ensure HTTPS and camera permissions, or use upload from gallery.',
+                icon: 'warning',
+                confirmButtonColor: '#0A1428'
+            });
+        }
+    };
+
+    // Direct capture & auto-upload like WhatsApp
+    const capturePhoto = () => {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        if (video && canvas && video.readyState === 4) {
+            canvas.width = 400;
+            canvas.height = 400;
+            const ctx = canvas.getContext('2d');
+
+            // Simple center crop for speed
+            ctx.drawImage(video, 0, 0, 400, 400);
+
+            const imageData = canvas.toDataURL('image/jpeg', 0.9); // Higher quality for professional photos
+            const blob = dataURLToBlob(imageData);
+
+            // Direct "upload" to state - WhatsApp style
+            setAttachments({ ...attachments, imageFile: blob });
+            setImagePreview(imageData);
+
+            // Clean stop and success feedback
+            video.srcObject.getTracks().forEach(track => track.stop());
+            setShowCamera(false);
+            setCameraLoading(false);
+
+            Swal.fire({
+                title: 'Photo Captured!',
+                text: 'Image ready for upload',
+                icon: 'success',
+                timer: 1500,
+                showConfirmButton: false
+            });
+        } else {
+            Swal.fire({
+                title: 'Camera Not Ready',
+                text: 'Please wait a moment and try again.',
+                icon: 'warning',
+                confirmButtonColor: '#0A1428'
+            });
+        }
+    };
+
+    const stopCamera = () => {
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+            setCameraStream(null);
+        }
+        if (videoRef.current && videoRef.current.srcObject) {
+            videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+        }
+        setShowCamera(false);
+        setCameraLoading(false);
+    };
+
+    const removeImage = () => {
+        setAttachments({ ...attachments, imageFile: null });
+        setImagePreview(null);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+    };
+
+    // Convert dataURL to Blob for file handling
+    const dataURLToBlob = (dataURL) => {
+        const [header, data] = dataURL.split(',');
+        const mime = header.match(/:(.*?);/)[1];
+        const bstr = atob(data);
+        const n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        for (let i = 0; i < n; i++) {
+            u8arr[i] = bstr.charCodeAt(i);
+        }
+        return new Blob([u8arr], { type: mime });
+    };
+
     const handleSubmit = () => {
+        const newTherapist = {
+            id: Date.now(),
+            ...formData,
+            attachments,
+            addedDate: new Date().toLocaleDateString()
+        };
+        setPendingTherapists([...pendingTherapists, newTherapist]);
+
         Swal.fire({
             title: 'Success!',
-            text: 'Therapist request submitted!',
+            text: 'Therapist added to pending list!',
             icon: 'success',
             confirmButtonColor: '#0A1428'
         });
+
+        // Reset form
         setCurrentStep(1);
-        setFormData({ firstName: '', lastName: '', nic: '', phone: '', email: '', address: '', experience: '' });
+        setFormData({ firstName: '', lastName: '', birthday: '', nic: '', phone: '' });
+        setAttachments({ nicFile: null, medicalFile: null, certificateFile: null, imageFile: null });
+        setImagePreview(null);
+        setShowCamera(false);
+        setCameraLoading(false);
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+            setCameraStream(null);
+        }
     };
 
+    const handleBulkSend = () => {
+        if (selectedForBulk.length === 0) {
+            Swal.fire({
+                title: 'No Selection',
+                text: 'Please select therapists to send',
+                icon: 'warning',
+                confirmButtonColor: '#0A1428'
+            });
+            return;
+        }
+
+        Swal.fire({
+            title: 'Confirm Bulk Send',
+            text: `Send ${selectedForBulk.length} therapist requests to AdminLSA?`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#0A1428',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Yes, Send All!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Remove selected therapists from pending list
+                setPendingTherapists(pendingTherapists.filter(t => !selectedForBulk.includes(t.id)));
+                setSelectedForBulk([]);
+
+                Swal.fire({
+                    title: 'Sent!',
+                    text: 'All selected requests sent to AdminLSA',
+                    icon: 'success',
+                    confirmButtonColor: '#0A1428'
+                });
+            }
+        });
+    };
+
+    const toggleSelection = (therapistId) => {
+        setSelectedForBulk(prev =>
+            prev.includes(therapistId)
+                ? prev.filter(id => id !== therapistId)
+                : [...prev, therapistId]
+        );
+    };
+
+    // Cleanup effect for camera
+    useEffect(() => {
+        return () => {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, [cameraStream]);
+
     return (
-        <div className="max-w-4xl mx-auto p-6">
+        <div className="max-w-6xl mx-auto p-6 space-y-8">
             <div className="bg-white rounded-2xl shadow-lg p-8">
                 <h2 className="text-2xl font-bold text-gray-800 mb-6">Add New Therapist</h2>
 
@@ -61,26 +303,270 @@ const AddTherapist = () => {
                 <div className="min-h-[400px]">
                     {currentStep === 1 && (
                         <div className="space-y-6">
-                            <h3 className="text-xl font-semibold text-gray-800">Basic Information</h3>
+                            <h3 className="text-xl font-semibold text-gray-800">Personal Information</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <input type="text" placeholder="First Name" value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none" />
-                                <input type="text" placeholder="Last Name" value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none" />
-                                <input type="text" placeholder="NIC Number" value={formData.nic} onChange={(e) => setFormData({ ...formData, nic: e.target.value })} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none" />
-                                <input type="tel" placeholder="Phone Number" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none" />
-                                <input type="email" placeholder="Email Address" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full md:col-span-2 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none" />
+                                <input
+                                    type="text"
+                                    name="firstName"
+                                    placeholder="First Name"
+                                    value={formData.firstName}
+                                    onChange={handleInputChange}
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
+                                />
+                                <input
+                                    type="text"
+                                    name="lastName"
+                                    placeholder="Last Name"
+                                    value={formData.lastName}
+                                    onChange={handleInputChange}
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
+                                />
+                                <input
+                                    type="date"
+                                    name="birthday"
+                                    placeholder="Birthday"
+                                    value={formData.birthday}
+                                    onChange={handleInputChange}
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
+                                />
+                                <input
+                                    type="text"
+                                    name="nic"
+                                    placeholder="NIC Number"
+                                    value={formData.nic}
+                                    onChange={handleInputChange}
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
+                                />
+                                <input
+                                    type="tel"
+                                    name="phone"
+                                    placeholder="Phone Number"
+                                    value={formData.phone}
+                                    onChange={handleInputChange}
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
+                                />
                             </div>
                         </div>
                     )}
                     {currentStep === 2 && (
-                        <div className="space-y-6">
-                            <h3 className="text-xl font-semibold text-gray-800">Address Details</h3>
-                            <textarea placeholder="Complete Address" rows="4" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none resize-none" />
+                        <div className="space-y-8">
+                            <h3 className="text-xl font-semibold text-gray-800">Document Attachments</h3>
+
+                            {/* RELOCATED: Enhanced Therapist Image Module - Now at Top */}
+                            <div className="bg-gradient-to-br from-gray-50 to-white p-8 rounded-2xl border-2 border-gray-100 shadow-sm">
+                                <div className="text-center">
+                                    <h4 className="text-lg font-semibold text-gray-800 mb-2">Therapist Profile Image</h4>
+                                    <p className="text-sm text-gray-600 mb-6">Capture or upload your professional profile photo</p>
+
+                                    {/* Square Preview Frame for Better Video Display */}
+                                    <div className="relative mx-auto mb-6">
+                                        <div className="w-64 h-64 rounded-2xl border-4 border-gray-200 overflow-hidden bg-black hover:border-[#D4AF37] transition-all duration-300 shadow-xl hover:shadow-2xl">
+                                            {imagePreview ? (
+                                                <img
+                                                    src={imagePreview}
+                                                    alt="Profile Preview"
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            ) : showCamera || cameraLoading ? (
+                                                <div className="relative w-full h-full">
+                                                    {cameraLoading ? (
+                                                        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-800 text-white">
+                                                            <div className="animate-spin rounded-full h-12 w-12 border-2 border-[#D4AF37] border-t-transparent mb-3"></div>
+                                                            <p className="text-sm">Starting camera...</p>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <video
+                                                                ref={videoRef}
+                                                                className="w-full h-full object-cover"
+                                                                playsInline
+                                                                muted
+                                                                autoPlay
+                                                                aria-label="Live camera preview - position your face to capture"
+                                                            />
+                                                            {/* Pink face guide overlay like WhatsApp */}
+                                                            <div className="absolute inset-6 border-2 border-pink-400 rounded-lg opacity-70 pointer-events-none"></div>
+                                                            <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded">📹 Live Camera</div>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center bg-gray-200">
+                                                    <FiCamera size={64} className="text-gray-400" />
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Remove Image Button */}
+                                        {imagePreview && !showCamera && (
+                                            <button
+                                                onClick={removeImage}
+                                                className="absolute -top-2 -right-2 w-10 h-10 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-110"
+                                                aria-label="Remove image"
+                                            >
+                                                <FiX size={18} />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Camera/Upload Controls */}
+                                    {!showCamera ? (
+                                        <div className="flex justify-center space-x-4 mb-4">
+                                            {/* File Upload Button */}
+                                            <label className="cursor-pointer bg-[#0A1428] text-white px-6 py-3 rounded-xl flex items-center space-x-3 hover:bg-[#1a2f4a] transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105">
+                                                <FiUpload size={18} />
+                                                <span className="font-medium">Upload from Gallery</span>
+                                                <input
+                                                    ref={fileInputRef}
+                                                    type="file"
+                                                    accept="image/png,image/jpeg,image/jpg"
+                                                    onChange={(e) => handleFileChange(e, 'imageFile')}
+                                                    className="hidden"
+                                                />
+                                            </label>
+
+                                            {/* Camera Button */}
+                                            <button
+                                                onClick={startCamera}
+                                                disabled={cameraLoading}
+                                                className="bg-[#D4AF37] text-white px-6 py-3 rounded-xl flex items-center space-x-3 hover:bg-[#B8941F] transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                                            >
+                                                <FiCamera size={18} />
+                                                <span className="font-medium">
+                                                    {cameraLoading ? 'Starting...' : 'Open Camera'}
+                                                </span>
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        /* Camera Controls - WhatsApp Style */
+                                        <div className="flex flex-col items-center space-y-4">
+                                            {/* Pink Capture Button like WhatsApp */}
+                                            <button
+                                                onClick={capturePhoto}
+                                                disabled={cameraLoading}
+                                                className="w-16 h-16 bg-pink-500 text-white rounded-full flex items-center justify-center hover:bg-pink-600 transition-all duration-200 shadow-2xl hover:shadow-pink-500/25 transform hover:scale-110 relative disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                                                aria-label="Capture photo from live preview"
+                                            >
+                                                <span className="text-2xl">📸</span>
+                                            </button>
+
+                                            {/* Cancel Button */}
+                                            <button
+                                                onClick={stopCamera}
+                                                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm"
+                                            >
+                                                Cancel
+                                            </button>
+
+                                            <div className="text-center">
+                                                <p className="text-sm text-gray-700 font-medium">Position your face and tap to capture</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* File Info */}
+                                    {attachments.imageFile && !showCamera && (
+                                        <div className="text-center bg-green-50 rounded-lg p-3 border border-green-200">
+                                            <p className="text-sm text-green-700 font-semibold">✓ Profile Image Ready</p>
+                                            <p className="text-xs text-green-600">{attachments.imageFile.name}</p>
+                                        </div>
+                                    )}
+
+                                    {/* Instructions */}
+                                    <div className="text-center mt-4">
+                                        <p className="text-xs text-gray-500">
+                                            Upload from gallery or capture with live camera • PNG, JPG only • Max 5MB
+                                        </p>
+                                    </div>
+
+                                    {/* Hidden canvas for photo capture */}
+                                    <canvas ref={canvasRef} className="hidden" />
+                                </div>
+                            </div>
+
+                            {/* Other Document Attachments - Below Image Module */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-gray-700">NIC Attachment (PDF, PNG, JPG)</label>
+                                    <input
+                                        type="file"
+                                        accept=".pdf,.png,.jpg,.jpeg"
+                                        onChange={(e) => handleFileChange(e, 'nicFile')}
+                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
+                                    />
+                                    {attachments.nicFile && <p className="text-sm text-green-600">✓ {attachments.nicFile.name}</p>}
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-gray-700">Medical Certificate (PDF, PNG, JPG)</label>
+                                    <input
+                                        type="file"
+                                        accept=".pdf,.png,.jpg,.jpeg"
+                                        onChange={(e) => handleFileChange(e, 'medicalFile')}
+                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
+                                    />
+                                    {attachments.medicalFile && <p className="text-sm text-green-600">✓ {attachments.medicalFile.name}</p>}
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-gray-700">Spa Center Certificate (PDF, PNG, JPG)</label>
+                                    <input
+                                        type="file"
+                                        accept=".pdf,.png,.jpg,.jpeg"
+                                        onChange={(e) => handleFileChange(e, 'certificateFile')}
+                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
+                                    />
+                                    {attachments.certificateFile && <p className="text-sm text-green-600">✓ {attachments.certificateFile.name}</p>}
+                                </div>
+                            </div>
                         </div>
                     )}
                     {currentStep === 3 && (
                         <div className="space-y-6">
-                            <h3 className="text-xl font-semibold text-gray-800">Experience & Specializations</h3>
-                            <textarea placeholder="Describe experience, certifications, and specializations..." rows="6" value={formData.experience} onChange={(e) => setFormData({ ...formData, experience: e.target.value })} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none resize-none" />
+                            <h3 className="text-xl font-semibold text-gray-800">Review & Finish</h3>
+                            <div className="bg-gray-50 rounded-lg p-6">
+                                <div className="flex items-start space-x-6">
+                                    {/* Profile Image Preview */}
+                                    {imagePreview && (
+                                        <div className="flex-shrink-0">
+                                            <div className="w-24 h-24 rounded-full border-4 border-[#D4AF37] overflow-hidden shadow-lg">
+                                                <img
+                                                    src={imagePreview}
+                                                    alt="Therapist Profile"
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            </div>
+                                            <p className="text-xs text-center text-gray-500 mt-2">Profile Image</p>
+                                        </div>
+                                    )}
+
+                                    {/* Information */}
+                                    <div className="flex-1">
+                                        <h4 className="font-semibold text-gray-800 mb-4">Review Information</h4>
+                                        <div className="grid grid-cols-2 gap-4 text-sm">
+                                            <div><span className="font-medium">Name:</span> {formData.firstName} {formData.lastName}</div>
+                                            <div><span className="font-medium">Birthday:</span> {formData.birthday}</div>
+                                            <div><span className="font-medium">NIC:</span> {formData.nic}</div>
+                                            <div><span className="font-medium">Phone:</span> {formData.phone}</div>
+                                        </div>
+                                        <div className="mt-4">
+                                            <h5 className="font-medium text-gray-700 mb-2">Attachments:</h5>
+                                            <div className="grid grid-cols-2 gap-2 text-sm">
+                                                <div className={attachments.nicFile ? 'text-green-600' : 'text-red-500'}>
+                                                    NIC: {attachments.nicFile ? '✓ Uploaded' : '✗ Not uploaded'}
+                                                </div>
+                                                <div className={attachments.medicalFile ? 'text-green-600' : 'text-red-500'}>
+                                                    Medical: {attachments.medicalFile ? '✓ Uploaded' : '✗ Not uploaded'}
+                                                </div>
+                                                <div className={attachments.certificateFile ? 'text-green-600' : 'text-red-500'}>
+                                                    Certificate: {attachments.certificateFile ? '✓ Uploaded' : '✗ Not uploaded'}
+                                                </div>
+                                                <div className={attachments.imageFile ? 'text-green-600' : 'text-red-500'}>
+                                                    Image: {attachments.imageFile ? '✓ Uploaded' : '✗ Not uploaded'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -96,28 +582,111 @@ const AddTherapist = () => {
                         </button>
                     ) : (
                         <button onClick={handleSubmit} className="flex items-center px-8 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700">
-                            Submit Request
+                            Add to Pending List
                         </button>
                     )}
                 </div>
             </div>
+
+            {/* Pending Therapists Table */}
+            {pendingTherapists.length > 0 && (
+                <div className="bg-white rounded-2xl shadow-lg p-8">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-xl font-semibold text-gray-800">Pending Therapist Requests</h3>
+                        <button
+                            onClick={handleBulkSend}
+                            disabled={selectedForBulk.length === 0}
+                            className="bg-[#0A1428] text-white px-6 py-2 rounded-lg font-medium hover:bg-[#1a2f4a] disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Send Selected to AdminLSA ({selectedForBulk.length})
+                        </button>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="border-b border-gray-200">
+                                    <th className="text-left py-3 px-4">
+                                        <input
+                                            type="checkbox"
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    setSelectedForBulk(pendingTherapists.map(t => t.id));
+                                                } else {
+                                                    setSelectedForBulk([]);
+                                                }
+                                            }}
+                                            checked={selectedForBulk.length === pendingTherapists.length && pendingTherapists.length > 0}
+                                        />
+                                    </th>
+                                    <th className="text-left py-3 px-4 font-semibold text-gray-800">Name</th>
+                                    <th className="text-left py-3 px-4 font-semibold text-gray-800">NIC</th>
+                                    <th className="text-left py-3 px-4 font-semibold text-gray-800">Phone</th>
+                                    <th className="text-left py-3 px-4 font-semibold text-gray-800">Added Date</th>
+                                    <th className="text-left py-3 px-4 font-semibold text-gray-800">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {pendingTherapists.map((therapist) => (
+                                    <tr key={therapist.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                        <td className="py-3 px-4">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedForBulk.includes(therapist.id)}
+                                                onChange={() => toggleSelection(therapist.id)}
+                                            />
+                                        </td>
+                                        <td className="py-3 px-4 font-medium">{therapist.firstName} {therapist.lastName}</td>
+                                        <td className="py-3 px-4">{therapist.nic}</td>
+                                        <td className="py-3 px-4">{therapist.phone}</td>
+                                        <td className="py-3 px-4">{therapist.addedDate}</td>
+                                        <td className="py-3 px-4">
+                                            <button className="text-[#0A1428] hover:text-[#1a2f4a] font-medium">
+                                                View Details
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
 
 // ViewTherapists Component
 const ViewTherapists = () => {
+    const [activeTab, setActiveTab] = useState('Approved');
     const [searchTerm, setSearchTerm] = useState('');
-    const therapists = [
-        { id: 1, name: 'Dr. Amara Silva', email: 'amara@spa.com', phone: '+94 77 123 4567', specialization: 'Swedish Massage', status: 'active', experience: '5 years' },
-        { id: 2, name: 'Priya Fernando', email: 'priya@spa.com', phone: '+94 77 987 6543', specialization: 'Deep Tissue', status: 'inactive', experience: '3 years' },
-        { id: 3, name: 'Kasun Perera', email: 'kasun@spa.com', phone: '+94 77 555 0123', specialization: 'Thai Massage', status: 'active', experience: '7 years' }
-    ];
+    const [showModal, setShowModal] = useState(false);
+    const [selectedTherapist, setSelectedTherapist] = useState(null);
 
-    const filteredTherapists = therapists.filter(therapist =>
+    const therapists = {
+        Approved: [
+            { id: 1, name: 'Dr. Amara Silva', email: 'amara@spa.com', nic: '199412345678', phone: '+94 77 123 4567', specialization: 'Swedish Massage', status: 'Active', experience: '5 years', photo: '/api/placeholder/150/150' },
+            { id: 4, name: 'Saman Kumara', email: 'saman@spa.com', nic: '198712345679', phone: '+94 77 222 3333', specialization: 'Aromatherapy', status: 'Active', experience: '4 years', photo: '/api/placeholder/150/150' }
+        ],
+        Pending: [
+            { id: 2, name: 'Priya Fernando', email: 'priya@spa.com', nic: '199012345679', phone: '+94 77 987 6543', specialization: 'Deep Tissue', status: 'Pending Review', experience: '3 years', photo: '/api/placeholder/150/150' },
+            { id: 5, name: 'Nimal Perera', email: 'nimal@spa.com', nic: '199212345680', phone: '+94 77 444 5555', specialization: 'Hot Stone', status: 'Pending Review', experience: '2 years', photo: '/api/placeholder/150/150' }
+        ],
+        Rejected: [
+            { id: 3, name: 'Kasun Perera', email: 'kasun@spa.com', nic: '198912345680', phone: '+94 77 555 0123', specialization: 'Thai Massage', status: 'Rejected', experience: '7 years', photo: '/api/placeholder/150/150', rejectionReason: 'Incomplete certification documents' },
+            { id: 6, name: 'Ruwan Silva', email: 'ruwan@spa.com', nic: '199112345681', phone: '+94 77 666 7777', specialization: 'Reflexology', status: 'Rejected', experience: '3 years', photo: '/api/placeholder/150/150', rejectionReason: 'Medical certificate expired' }
+        ]
+    };
+
+    const filteredTherapists = therapists[activeTab].filter(therapist =>
         therapist.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        therapist.email.toLowerCase().includes(searchTerm.toLowerCase())
+        therapist.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        therapist.nic.includes(searchTerm)
     );
+
+    const viewDetails = (therapist) => {
+        setSelectedTherapist(therapist);
+        setShowModal(true);
+    };
 
     return (
         <div className="max-w-6xl mx-auto p-6">
@@ -130,73 +699,232 @@ const ViewTherapists = () => {
                     <div className="text-sm text-gray-500">{filteredTherapists.length} therapist(s) found</div>
                 </div>
 
-                <div className="flex-1 relative mb-8">
-                    <input type="text" placeholder="Search therapists by name or email..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] focus:border-transparent outline-none" />
+                {/* Search Bar */}
+                <div className="mb-6">
+                    <input
+                        type="text"
+                        placeholder="Search therapists by name, email, or NIC..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] focus:border-transparent outline-none"
+                    />
                 </div>
 
+                {/* Tab Navigation */}
+                <div className="flex border-b border-gray-200 mb-6">
+                    {['Approved', 'Pending', 'Rejected'].map(tab => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={`px-6 py-3 font-medium transition-colors duration-200 ${activeTab === tab
+                                ? 'border-b-2 border-[#D4AF37] text-[#D4AF37]'
+                                : 'text-gray-600 hover:text-gray-800'
+                                }`}
+                        >
+                            {tab} ({therapists[tab].length})
+                        </button>
+                    ))}
+                </div>
+
+                {/* Therapists Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredTherapists.map((therapist) => (
                         <div key={therapist.id} className="bg-gray-50 rounded-xl p-6 hover:shadow-md transition-shadow duration-200">
                             <div className="flex items-center space-x-3 mb-4">
-                                <div className="w-12 h-12 bg-[#0A1428] rounded-full flex items-center justify-center text-white font-semibold">
+                                <img
+                                    src={therapist.photo}
+                                    alt={therapist.name}
+                                    className="w-16 h-16 rounded-full object-cover bg-gray-200"
+                                    onError={(e) => {
+                                        e.target.style.display = 'none';
+                                        e.target.nextSibling.style.display = 'flex';
+                                    }}
+                                />
+                                <div className="w-16 h-16 bg-[#0A1428] rounded-full hidden items-center justify-center text-white font-semibold">
                                     {therapist.name.split(' ').map(n => n[0]).join('')}
                                 </div>
-                                <div>
+                                <div className="flex-1">
                                     <h3 className="font-semibold text-gray-900">{therapist.name}</h3>
-                                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${therapist.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${therapist.status === 'Active' ? 'bg-green-100 text-green-800' :
+                                        therapist.status === 'Pending Review' ? 'bg-yellow-100 text-yellow-800' :
+                                            'bg-red-100 text-red-800'
+                                        }`}>
                                         {therapist.status}
                                     </span>
                                 </div>
                             </div>
                             <div className="space-y-2 text-sm text-gray-600">
                                 <div><span className="font-medium">Email:</span> {therapist.email}</div>
+                                <div><span className="font-medium">NIC:</span> {therapist.nic}</div>
                                 <div><span className="font-medium">Specialty:</span> {therapist.specialization}</div>
-                                <div><span className="font-medium">Experience:</span> {therapist.experience}</div>
+                                {activeTab === 'Rejected' && therapist.rejectionReason && (
+                                    <div className="text-red-600"><span className="font-medium">Reason:</span> {therapist.rejectionReason}</div>
+                                )}
                             </div>
                             <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-200">
-                                <button className="text-[#0A1428] hover:text-[#1a2f4a] font-medium">View Details</button>
+                                <button
+                                    onClick={() => viewDetails(therapist)}
+                                    className="text-[#0A1428] hover:text-[#1a2f4a] font-medium"
+                                >
+                                    View Details
+                                </button>
                             </div>
                         </div>
                     ))}
                 </div>
+
+                {filteredTherapists.length === 0 && (
+                    <div className="text-center py-12">
+                        <p className="text-gray-500">No therapists found matching your search.</p>
+                    </div>
+                )}
             </div>
+
+            {/* Therapist Details Modal */}
+            {showModal && selectedTherapist && (
+                <div className="fixed inset-0 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-2xl font-bold text-gray-800">Therapist Profile</h3>
+                            <button
+                                onClick={() => setShowModal(false)}
+                                className="text-gray-400 hover:text-gray-600 text-2xl"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <div className="flex items-center space-x-6 mb-6">
+                            <img
+                                src={selectedTherapist.photo}
+                                alt={selectedTherapist.name}
+                                className="w-24 h-24 rounded-full object-cover bg-gray-200"
+                                onError={(e) => {
+                                    e.target.style.display = 'none';
+                                    e.target.nextSibling.style.display = 'flex';
+                                }}
+                            />
+                            <div className="w-24 h-24 bg-[#0A1428] rounded-full hidden items-center justify-center text-white font-bold text-2xl">
+                                {selectedTherapist.name.split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <div>
+                                <h4 className="text-xl font-bold text-gray-800">{selectedTherapist.name}</h4>
+                                <span className={`px-3 py-1 rounded-full text-sm font-medium ${selectedTherapist.status === 'Active' ? 'bg-green-100 text-green-800' :
+                                    selectedTherapist.status === 'Pending Review' ? 'bg-yellow-100 text-yellow-800' :
+                                        'bg-red-100 text-red-800'
+                                    }`}>
+                                    {selectedTherapist.status}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-6">
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-sm font-medium text-gray-600 block">Email</label>
+                                    <p className="text-gray-800">{selectedTherapist.email}</p>
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium text-gray-600 block">Phone</label>
+                                    <p className="text-gray-800">{selectedTherapist.phone}</p>
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium text-gray-600 block">NIC</label>
+                                    <p className="text-gray-800">{selectedTherapist.nic}</p>
+                                </div>
+                            </div>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-sm font-medium text-gray-600 block">Specialization</label>
+                                    <p className="text-gray-800">{selectedTherapist.specialization}</p>
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium text-gray-600 block">Experience</label>
+                                    <p className="text-gray-800">{selectedTherapist.experience}</p>
+                                </div>
+                                {selectedTherapist.rejectionReason && (
+                                    <div>
+                                        <label className="text-sm font-medium text-red-600 block">Rejection Reason</label>
+                                        <p className="text-red-800 bg-red-50 p-2 rounded">{selectedTherapist.rejectionReason}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
 
-// ResignTerminate Component with NNF Modal System
+// ResignTerminate Component with Direct Actions
 const ResignTerminate = () => {
-    const [showModal, setShowModal] = useState(false);
-    const [currentStep, setCurrentStep] = useState(1);
+    const [showTerminateModal, setShowTerminateModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const [formData, setFormData] = useState({
-        therapistId: '', therapistName: '', type: 'resign', reason: '', notes: ''
-    });
+    const [selectedTherapist, setSelectedTherapist] = useState(null);
+    const [terminateReason, setTerminateReason] = useState('');
 
     const therapists = [
-        { id: 1, name: 'Dr. Amara Silva', email: 'amara@spa.com', specialization: 'Swedish Massage', status: 'active' },
-        { id: 2, name: 'Priya Fernando', email: 'priya@spa.com', specialization: 'Deep Tissue', status: 'pending_review' },
-        { id: 3, name: 'Kasun Perera', email: 'kasun@spa.com', specialization: 'Thai Massage', status: 'active' }
+        { id: 1, name: 'Dr. Amara Silva', email: 'amara@spa.com', nic: '199412345678', specialization: 'Swedish Massage', status: 'active' },
+        { id: 2, name: 'Priya Fernando', email: 'priya@spa.com', nic: '199012345679', specialization: 'Deep Tissue', status: 'active' },
+        { id: 3, name: 'Kasun Perera', email: 'kasun@spa.com', nic: '198912345680', specialization: 'Thai Massage', status: 'active' }
     ];
 
-    const openModal = (therapist, type) => {
-        setFormData({ therapistId: therapist.id, therapistName: therapist.name, type, reason: '', notes: '' });
-        setCurrentStep(1);
-        setShowModal(true);
+    const handleResign = (therapist) => {
+        Swal.fire({
+            title: 'Confirm Resignation',
+            text: `Are you sure you want to resign ${therapist.name}?`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#orange',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Yes, Resign'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Direct action - no AdminLSA approval needed
+                Swal.fire({
+                    title: 'Resigned!',
+                    text: `${therapist.name} has been resigned successfully.`,
+                    icon: 'success',
+                    confirmButtonColor: '#0A1428'
+                });
+            }
+        });
     };
 
-    const handleSubmit = () => {
+    const handleTerminate = (therapist) => {
+        setSelectedTherapist(therapist);
+        setShowTerminateModal(true);
+    };
+
+    const submitTermination = () => {
+        if (!terminateReason.trim()) {
+            Swal.fire({
+                title: 'Reason Required',
+                text: 'Please provide a reason for termination.',
+                icon: 'warning',
+                confirmButtonColor: '#0A1428'
+            });
+            return;
+        }
+
+        // Direct action - save to database with reason
         Swal.fire({
-            title: 'Request Sent!',
-            text: `${formData.type === 'resign' ? 'Resignation' : 'Termination'} request sent! Admin approval pending.`,
+            title: 'Terminated!',
+            text: `${selectedTherapist.name} has been terminated successfully.`,
             icon: 'success',
             confirmButtonColor: '#0A1428'
         });
-        setShowModal(false);
+
+        setShowTerminateModal(false);
+        setTerminateReason('');
+        setSelectedTherapist(null);
     };
 
     const filteredTherapists = therapists.filter(t =>
-        t.name.toLowerCase().includes(searchTerm.toLowerCase())
+        t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.nic.includes(searchTerm)
     );
 
     return (
@@ -206,7 +934,7 @@ const ResignTerminate = () => {
 
                 <input
                     type="text"
-                    placeholder="Search therapists..."
+                    placeholder="Search by NIC, email, or name..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full p-3 mb-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
@@ -229,18 +957,19 @@ const ResignTerminate = () => {
                             </div>
                             <div className="text-sm text-gray-600 mb-4">
                                 <div>Email: {therapist.email}</div>
+                                <div>NIC: {therapist.nic}</div>
                                 <div>Specialty: {therapist.specialization}</div>
                             </div>
                             {therapist.status === 'active' && (
                                 <div className="flex space-x-2">
                                     <button
-                                        onClick={() => openModal(therapist, 'resign')}
+                                        onClick={() => handleResign(therapist)}
                                         className="flex-1 bg-orange-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-orange-600"
                                     >
                                         Resign
                                     </button>
                                     <button
-                                        onClick={() => openModal(therapist, 'terminate')}
+                                        onClick={() => handleTerminate(therapist)}
                                         className="flex-1 bg-red-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-red-600"
                                     >
                                         Terminate
@@ -251,65 +980,149 @@ const ResignTerminate = () => {
                     ))}
                 </div>
 
-                {/* Simple Modal */}
-                {showModal && (
-                    <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                        <div className="bg-white rounded-2xl w-full max-w-md p-6">
-                            <h3 className="text-xl font-bold text-gray-800 mb-4">
-                                {formData.type === 'resign' ? 'Process Resignation' : 'Process Termination'}
-                            </h3>
+                {/* Terminate Modal with Required Reason */}
+                {showTerminateModal && selectedTherapist && (
+                    <div className="fixed inset-0 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                            <div className="text-center mb-6">
+                                <h3 className="text-xl font-bold text-gray-800 mb-2">Terminate {selectedTherapist.name}</h3>
+                                <p className="text-gray-600">This action will be saved directly to the database</p>
+                            </div>
+
                             <div className="space-y-4">
                                 <div>
-                                    <strong>Therapist:</strong> {formData.therapistName}
-                                </div>
-                                <select
-                                    value={formData.reason}
-                                    onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
-                                >
-                                    <option value="">Select reason</option>
-                                    {formData.type === 'resign' ? (
-                                        <>
-                                            <option value="voluntary">Voluntary Resignation</option>
-                                            <option value="relocation">Relocation</option>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <option value="performance">Performance Issues</option>
-                                            <option value="other">Other</option>
-                                        </>
-                                    )}
-                                </select>
-                                <textarea
-                                    placeholder="Additional notes (optional)"
-                                    value={formData.notes}
-                                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                    rows="3"
-                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none resize-none"
-                                />
-                                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                                    <p className="text-sm text-yellow-700">⚠️ Admin approval needed—irreversible action.</p>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Termination Reason (Required)
+                                    </label>
+                                    <textarea
+                                        value={terminateReason}
+                                        onChange={(e) => setTerminateReason(e.target.value)}
+                                        rows="4"
+                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none resize-none"
+                                        placeholder="Enter detailed reason for termination..."
+                                    />
                                 </div>
                             </div>
+
                             <div className="flex space-x-3 mt-6">
                                 <button
-                                    onClick={() => setShowModal(false)}
-                                    className="flex-1 px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200"
+                                    onClick={() => {
+                                        setShowTerminateModal(false);
+                                        setTerminateReason('');
+                                        setSelectedTherapist(null);
+                                    }}
+                                    className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-medium hover:bg-gray-300"
                                 >
                                     Cancel
                                 </button>
                                 <button
-                                    onClick={handleSubmit}
-                                    disabled={!formData.reason}
-                                    className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:bg-gray-400"
+                                    onClick={submitTermination}
+                                    disabled={!terminateReason.trim()}
+                                    className="flex-1 bg-red-500 text-white py-3 rounded-lg font-medium hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    Send Request
+                                    Confirm Termination
                                 </button>
                             </div>
                         </div>
                     </div>
                 )}
             </div>
+        </div>
+    );
+};
+
+// Quick Access Profile Component
+const QuickProfile = () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const profileData = {
+        spaName: 'Ayura Wellness Spa',
+        currentPlan: 'Annual (Expires: Dec 03, 2025)',
+        usage: '24 Therapists | 18 Active Services',
+        owner: 'Dr. Samantha Perera'
+    };
+
+    const handleLogout = () => {
+        Swal.fire({
+            title: 'Confirm Logout',
+            text: 'Are you sure you want to logout?',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#0A1428',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Yes, Logout'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Implement logout logic here
+                console.log('Logging out...');
+            }
+        });
+    };
+
+    return (
+        <div className="relative">
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-10 h-10 bg-[#D4AF37] rounded-full flex items-center justify-center text-white font-bold hover:bg-[#b8941f] transition-colors"
+            >
+                A
+            </button>
+            <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+
+            {isOpen && (
+                <>
+                    <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setIsOpen(false)}
+                    ></div>
+                    <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-50">
+                        {/* Profile Header */}
+                        <div className="px-4 py-3 border-b border-gray-100">
+                            <div className="flex items-center space-x-3">
+                                <div className="w-12 h-12 bg-[#D4AF37] rounded-full flex items-center justify-center text-white font-bold text-lg">
+                                    A
+                                </div>
+                                <div>
+                                    <h3 className="font-semibold text-gray-800">{profileData.spaName}</h3>
+                                    <p className="text-sm text-gray-600">{profileData.owner}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* System Details */}
+                        <div className="px-4 py-3 border-b border-gray-100">
+                            <div className="space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-600">Current Plan:</span>
+                                    <span className="font-medium text-green-600">Annual</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-gray-600">Expires:</span>
+                                    <span className="text-gray-800">Dec 03, 2025</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-gray-600">Therapists:</span>
+                                    <span className="text-gray-800">24 Active</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-gray-600">Services:</span>
+                                    <span className="text-gray-800">18 Active</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="px-2 py-2">
+                            <button
+                                onClick={handleLogout}
+                                className="w-full text-left px-3 py-2 text-red-600 hover:bg-red-50 rounded-md transition-colors flex items-center"
+                            >
+                                <FiLogOut className="mr-2" size={16} />
+                                Logout
+                            </button>
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
     );
 };
@@ -326,7 +1139,7 @@ const AdminSPA = () => {
         { id: 'add-therapist', label: 'Add Therapist', icon: <FiUserPlus size={20} /> },
         { id: 'view-therapists', label: 'View Therapists', icon: <FiUsers size={20} /> },
         { id: 'resign-terminate', label: 'Manage Staff', icon: <FiFilter size={20} /> },
-        { id: 'spa-settings', label: 'Settings', icon: <FiSettings size={20} /> },
+        { id: 'spa-profile', label: 'Spa Profile', icon: <FiSettings size={20} /> },
     ];
 
     const renderContent = () => {
@@ -341,8 +1154,8 @@ const AdminSPA = () => {
                 return <ViewTherapists />;
             case 'resign-terminate':
                 return <ResignTerminate />;
-            case 'spa-settings':
-                return <SpaSettings />;
+            case 'spa-profile':
+                return <SpaProfile />;
             default:
                 return <Dashboard />;
         }
@@ -488,12 +1301,7 @@ const AdminSPA = () => {
                             </h1>
                         </div>
                         <div className="flex items-center space-x-4">
-                            <div className="relative">
-                                <div className="w-10 h-10 rounded-full bg-gold-500 flex items-center justify-center text-white font-semibold">
-                                    A
-                                </div>
-                                <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
-                            </div>
+                            <QuickProfile />
                         </div>
                     </div>
                 </header>
