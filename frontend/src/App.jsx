@@ -12,13 +12,14 @@ import Media from './pages/Blog';
 import Gallery from "./pages/Gallery";
 import Registration from "./pages/Registration";
 import Contact from "./pages/Contact";
+import TestNotifications from "./pages/TestNotifications";
 
 function App() {
   const [count, setCount] = useState(0);
   const location = useLocation();
 
   // Pages where we want to hide Navbar + Footer
-  const hideLayoutRoutes = ["/login", "/adminLSA", "/adminSPA"];
+  const hideLayoutRoutes = ["/login", "/adminLSA", "/adminSPA", "/test-notifications"];
 
   // Check if current path matches any in hideLayoutRoutes
   const hideLayout = hideLayoutRoutes.includes(location.pathname);
@@ -40,6 +41,7 @@ function App() {
             <AdminSPA />
           </SpaContextProvider>
         } />
+        <Route path="/test-notifications" element={<TestNotifications />} />
       </Routes>
       {!hideLayout && <Footer />}
     </>

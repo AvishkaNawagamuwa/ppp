@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced AdminLSA - View Details Demo</title>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .title {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .success-message {
+            background: #10b981;
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .demo-section {
+            margin-bottom: 30px;
+            padding: 25px;
+            background: #f8fafc;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+        }
+
+        .demo-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin: 10px 10px 10px 0;
+            transition: all 0.3s ease;
+        }
+
+        .demo-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .feature-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+        }
+
+        .feature-list li:before {
+            content: "✅";
+            margin-right: 12px;
+            font-size: 1.2rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">🎉 Enhanced "View Details" Functionality</h1>
+            <p>Complete notification system with detailed therapist management</p>
+        </div>
+
+        <div class="success-message">
+            ⚡ All Enhanced Features Successfully Implemented and Ready for Testing!
+        </div>
+
+        <div class="demo-section">
+            <h3>🚀 What's New:</h3>
+            <ul class="feature-list">
+                <li>Enhanced Therapist Details Modal with comprehensive information</li>
+                <li>Real-time notification history with timestamps</li>
+                <li>Notification History Management page</li>
+                <li>Database-integrated notification system</li>
+                <li>Smart "View Details" button functionality</li>
+                <li>Document status indicators</li>
+                <li>Admin comments and rejection reasons</li>
+                <li>Professional timeline view</li>
+            </ul>
+        </div>
+
+        <div class="demo-section">
+            <h3>🎯 Test the Enhanced System:</h3>
+            <p><strong>Step 1:</strong> Open AdminLSA dashboard and check the "Notification History" tab</p>
+            <a href="http://localhost:5174/adminLSA" class="demo-button" target="_blank">Open AdminLSA Dashboard</a>
+
+            <p><strong>Step 2:</strong> Open AdminSPA and submit a therapist registration</p>
+            <a href="http://localhost:5174/adminSPA" class="demo-button" target="_blank">Open AdminSPA Dashboard</a>
+
+            <p><strong>Step 3:</strong> Test the notification system</p>
+            <a href="http://localhost:5174/test-notifications" class="demo-button" target="_blank">Test
+                Notifications</a>
+        </div>
+
+        <div class="demo-section">
+            <h3>✨ Key Improvements:</h3>
+            <p>When you click "View Details" in a notification popup, you'll now see:</p>
+            <ul class="feature-list">
+                <li>Complete therapist profile with personal and professional details</li>
+                <li>Document attachment status (NIC, Medical Certificate, Photo)</li>
+                <li>Real-time notification history timeline</li>
+                <li>Direct approve/reject actions from the modal</li>
+                <li>Admin comments and rejection reasons display</li>
+                <li>Professional responsive design with smooth animations</li>
+            </ul>
+        </div>
+
+        <div
+            style="text-align: center; margin-top: 40px; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 15px; color: white;">
+            <h3>🎊 System Ready for Testing!</h3>
+            <p>The enhanced notification system with detailed therapist management is now fully operational.</p>
+            <a href="http://localhost:5174/adminLSA" class="demo-button"
+                style="background: rgba(255,255,255,0.2); border: 2px solid white;">Start Testing Now</a>
+        </div>
+    </div>
+</body>
+
+</html>

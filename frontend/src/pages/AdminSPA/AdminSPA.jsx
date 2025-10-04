@@ -1,5 +1,6 @@
 ﻿import React, { useState, useRef, useEffect } from 'react';
 import Swal from 'sweetalert2';
+import io from 'socket.io-client';
 import {
     FiHome,
     FiCreditCard,
@@ -12,7 +13,8 @@ import {
     FiChevronLeft,
     FiCamera,
     FiUpload,
-    FiX
+    FiX,
+    FiBell
 } from 'react-icons/fi';
 import assets from '../../assets/images/images';
 
@@ -199,23 +201,85 @@ const AddTherapist = () => {
         return new Blob([u8arr], { type: mime });
     };
 
-    const handleSubmit = () => {
-        const newTherapist = {
-            id: Date.now(),
-            ...formData,
-            attachments,
-            addedDate: new Date().toLocaleDateString()
-        };
-        setPendingTherapists([...pendingTherapists, newTherapist]);
+    const handleSubmit = async () => {
+        try {
+            // Create FormData for file uploads
+            const formDataToSend = new FormData();
+            formDataToSend.append('firstName', formData.firstName);
+            formDataToSend.append('lastName', formData.lastName);
+            formDataToSend.append('birthday', formData.birthday);
+            formDataToSend.append('nic', formData.nic);
+            formDataToSend.append('phone', formData.phone);
+            formDataToSend.append('spa_id', 1); // Assuming spa_id 1 for now
+            formDataToSend.append('name', `${formData.firstName} ${formData.lastName}`);
+            formDataToSend.append('email', `${formData.firstName.toLowerCase()}.${formData.lastName.toLowerCase()}@spa.com`);
+            formDataToSend.append('address', 'Spa Location'); // Default address
+            formDataToSend.append('experience_years', 0);
+            formDataToSend.append('specializations', JSON.stringify(['General Therapy']));
 
-        Swal.fire({
-            title: 'Success!',
-            text: 'Therapist added to pending list!',
-            icon: 'success',
-            confirmButtonColor: '#0A1428'
-        });
+            // Append files if they exist
+            if (attachments.nicFile) formDataToSend.append('nicFile', attachments.nicFile);
+            if (attachments.medicalFile) formDataToSend.append('medicalFile', attachments.medicalFile);
+            if (attachments.certificateFile) formDataToSend.append('certificate', attachments.certificateFile);
+            if (attachments.imageFile) formDataToSend.append('profileImage', attachments.imageFile);
 
-        // Reset form
+            // Send to backend
+            const response = await fetch('http://localhost:5000/api/therapists/register', {
+                method: 'POST',
+                body: formDataToSend
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                // Add to local pending list for immediate UI update
+                const newTherapist = {
+                    id: result.data.id,
+                    ...formData,
+                    attachments,
+                    addedDate: new Date().toLocaleDateString(),
+                    status: 'pending'
+                };
+                setPendingTherapists([...pendingTherapists, newTherapist]);
+
+                // Send notification to AdminLSA
+                await fetch('http://localhost:5000/api/lsa/notifications', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        recipient_id: 1, // LSA admin ID
+                        recipient_type: 'admin_lsa',
+                        title: 'New Therapist Registration',
+                        message: `New therapist "${formData.firstName} ${formData.lastName}" has registered and is pending approval.`,
+                        type: 'therapist_registration',
+                        reference_id: result.data.id,
+                        reference_type: 'therapist'
+                    })
+                });
+
+                Swal.fire({
+                    title: 'Success!',
+                    text: 'Therapist registration submitted successfully! AdminLSA has been notified.',
+                    icon: 'success',
+                    confirmButtonColor: '#0A1428'
+                });
+            } else {
+                throw new Error(result.message || 'Registration failed');
+            }
+        } catch (error) {
+            console.error('Error submitting therapist:', error);
+            Swal.fire({
+                title: 'Error!',
+                text: error.message || 'Failed to submit therapist registration. Please try again.',
+                icon: 'error',
+                confirmButtonColor: '#d33'
+            });
+            return; // Don't reset form on error
+        }
+
+        // Reset form only on success
         setCurrentStep(1);
         setFormData({ firstName: '', lastName: '', birthday: '', nic: '', phone: '' });
         setAttachments({ nicFile: null, medicalFile: null, certificateFile: null, imageFile: null });
@@ -1131,6 +1195,90 @@ const AdminSPA = () => {
     const [activeTab, setActiveTab] = useState('dashboard');
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+    const [notifications, setNotifications] = useState([]);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [showNotifications, setShowNotifications] = useState(false);
+
+    // Socket.io connection
+    const [socket, setSocket] = useState(null);
+
+    // Initialize Socket.io connection
+    useEffect(() => {
+        const spaId = localStorage.getItem('spaId') || '1'; // Get from localStorage or default
+        const newSocket = io('http://localhost:5000');
+
+        newSocket.emit('join_spa', spaId);
+
+        newSocket.on('connect', () => {
+            console.log('Connected to server');
+        });
+
+        newSocket.on('therapist_status_update', (data) => {
+            console.log('Received therapist status update:', data);
+
+            // Add notification to state
+            const newNotification = {
+                id: Date.now(),
+                type: data.status,
+                message: data.message,
+                timestamp: new Date().toISOString(),
+                read: false
+            };
+
+            setNotifications(prev => [newNotification, ...prev]);
+            setUnreadCount(prev => prev + 1);
+
+            // Show SweetAlert notification
+            Swal.fire({
+                icon: data.status === 'approved' ? 'success' : 'info',
+                title: data.status === 'approved' ? 'Therapist Approved!' : 'Therapist Status Update',
+                text: data.message,
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 5000,
+                timerProgressBar: true
+            });
+        });
+
+        setSocket(newSocket);
+
+        return () => {
+            newSocket.disconnect();
+        };
+    }, []);
+
+    // Mark notifications as read
+    const markAsRead = (notificationId) => {
+        setNotifications(prev =>
+            prev.map(notification =>
+                notification.id === notificationId
+                    ? { ...notification, read: true }
+                    : notification
+            )
+        );
+        setUnreadCount(prev => Math.max(0, prev - 1));
+    };
+
+    // Clear all notifications
+    const clearAllNotifications = () => {
+        setNotifications([]);
+        setUnreadCount(0);
+    };
+
+    // Close notifications when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (showNotifications && !event.target.closest('.notification-container')) {
+                setShowNotifications(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showNotifications]);
 
     // Navigation items
     const navItems = [
@@ -1301,6 +1449,63 @@ const AdminSPA = () => {
                             </h1>
                         </div>
                         <div className="flex items-center space-x-4">
+                            {/* Notification Bell */}
+                            <div className="relative notification-container">
+                                <button
+                                    onClick={() => setShowNotifications(!showNotifications)}
+                                    className="relative p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                                >
+                                    <FiBell size={20} />
+                                    {unreadCount > 0 && (
+                                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                            {unreadCount > 9 ? '9+' : unreadCount}
+                                        </span>
+                                    )}
+                                </button>
+
+                                {/* Notifications Dropdown */}
+                                {showNotifications && (
+                                    <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-96 overflow-y-auto">
+                                        <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+                                            <h3 className="font-semibold text-gray-800">Notifications</h3>
+                                            <button
+                                                onClick={clearAllNotifications}
+                                                className="text-sm text-blue-600 hover:text-blue-800"
+                                            >
+                                                Clear All
+                                            </button>
+                                        </div>
+                                        <div className="max-h-64 overflow-y-auto">
+                                            {notifications.length === 0 ? (
+                                                <div className="p-4 text-center text-gray-500">
+                                                    No notifications yet
+                                                </div>
+                                            ) : (
+                                                notifications.map((notification) => (
+                                                    <div
+                                                        key={notification.id}
+                                                        className={`p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${!notification.read ? 'bg-blue-50' : ''
+                                                            }`}
+                                                        onClick={() => markAsRead(notification.id)}
+                                                    >
+                                                        <div className="flex items-start justify-between">
+                                                            <div className="flex-1">
+                                                                <p className="text-sm text-gray-800">{notification.message}</p>
+                                                                <p className="text-xs text-gray-500 mt-1">
+                                                                    {new Date(notification.timestamp).toLocaleString()}
+                                                                </p>
+                                                            </div>
+                                                            <div className={`w-2 h-2 rounded-full mt-2 ${notification.type === 'approved' ? 'bg-green-500' :
+                                                                    notification.type === 'rejected' ? 'bg-red-500' : 'bg-blue-500'
+                                                                }`}></div>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                             <QuickProfile />
                         </div>
                     </div>

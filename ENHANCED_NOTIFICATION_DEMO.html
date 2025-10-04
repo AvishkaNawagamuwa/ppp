@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Notification System Demo</title>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid #f0f0f0;
+        }
+
+        .title {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: #2d3748;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: #718096;
+        }
+
+        .demo-section {
+            margin-bottom: 40px;
+            padding: 30px;
+            border: 2px solid #e2e8f0;
+            border-radius: 15px;
+            background: #f8fafc;
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+
+        .icon {
+            width: 24px;
+            height: 24px;
+            margin-right: 12px;
+        }
+
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .demo-card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            border-left: 4px solid #667eea;
+        }
+
+        .demo-card h3 {
+            color: #2d3748;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+
+        .demo-card p {
+            color: #718096;
+            margin-bottom: 15px;
+        }
+
+        .demo-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .demo-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .features-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .features-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+        }
+
+        .features-list li:before {
+            content: "✅";
+            margin-right: 12px;
+            font-size: 1.2rem;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            background: #10b981;
+            color: white;
+            margin-left: 10px;
+        }
+
+        .workflow-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .workflow-step {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            border: 2px solid #e2e8f0;
+            position: relative;
+        }
+
+        .workflow-step:not(:last-child):after {
+            content: "→";
+            position: absolute;
+            right: -20px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.5rem;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .step-number {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 10px;
+            font-weight: bold;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+
+            .title {
+                font-size: 2rem;
+            }
+
+            .demo-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .workflow-steps {
+                grid-template-columns: 1fr;
+            }
+
+            .workflow-step:not(:last-child):after {
+                content: "↓";
+                right: 50%;
+                top: 100%;
+                transform: translateX(50%);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">🎉 Enhanced AdminLSA Notification System</h1>
+            <p class="subtitle">Complete bidirectional real-time notification management with detailed therapist views
+            </p>
+        </div>
+
+        <div class="demo-section">
+            <h2 class="section-title">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                        d="M13 3c3.9 0 7 3.1 7 7 0 2.8-1.6 5.2-4 6.3V21h-6v-4.7c-2.4-1.1-4-3.5-4-6.3 0-3.9 3.1-7 7-7h0z" />
+                </svg>
+                🔥 New Features Implemented
+            </h2>
+            <ul class="features-list">
+                <li>Enhanced Therapist Details Modal with comprehensive information display</li>
+                <li>Real-time notification history with timestamp and status tracking</li>
+                <li>Notification History Management page with filtering and search</li>
+                <li>Database-integrated notification system with persistent storage</li>
+                <li>Smart "View Details" functionality that opens therapist profiles</li>
+                <li>Document attachment status indicators</li>
+                <li>Admin comments and rejection reason display</li>
+                <li>Professional timeline view of notification events</li>
+                <li>Socket.io real-time updates with room-based communication</li>
+                <li>Mobile-responsive design with smooth animations</li>
+            </ul>
+        </div>
+
+        <div class="demo-section">
+            <h2 class="section-title">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                        d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                </svg>
+                🚀 Live Demo Access
+            </h2>
+            <div class="demo-grid">
+                <div class="demo-card">
+                    <h3>AdminLSA Dashboard</h3>
+                    <p>Access the enhanced admin dashboard with notification management and therapist details view.</p>
+                    <a href="http://localhost:5174/adminLSA" class="demo-button" target="_blank">Open AdminLSA</a>
+                </div>
+                <div class="demo-card">
+                    <h3>AdminSPA Dashboard</h3>
+                    <p>Test therapist registration and receive real-time approval/rejection notifications.</p>
+                    <a href="http://localhost:5174/adminSPA" class="demo-button" target="_blank">Open AdminSPA</a>
+                </div>
+                <div class="demo-card">
+                    <h3>Notification Testing</h3>
+                    <p>Comprehensive testing interface for real-time notification system validation.</p>
+                    <a href="http://localhost:5174/test-notifications" class="demo-button" target="_blank">Test
+                        Notifications</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2 class="section-title">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                📋 Enhanced "View Details" Workflow
+            </h2>
+            <div class="workflow-steps">
+                <div class="workflow-step">
+                    <div class="step-number">1</div>
+                    <h4>Registration Alert</h4>
+                    <p>Real-time notification popup appears when therapist registers</p>
+                </div>
+                <div class="workflow-step">
+                    <div class="step-number">2</div>
+                    <h4>Click "View Details"</h4>
+                    <p>Enhanced modal opens with comprehensive therapist information</p>
+                </div>
+                <div class="workflow-step">
+                    <div class="step-number">3</div>
+                    <h4>Review Information</h4>
+                    <p>View personal details, documents, and notification history</p>
+                </div>
+                <div class="workflow-step">
+                    <div class="step-number">4</div>
+                    <h4>Take Action</h4>
+                    <p>Approve or reject directly from the details modal</p>
+                </div>
+                <div class="workflow-step">
+                    <div class="step-number">5</div>
+                    <h4>Real-time Update</h4>
+                    <p>Status changes broadcast to AdminSPA instantly</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2 class="section-title">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                        d="M15 17h5l-5 5v-5zM4 1h5c1.1 0 2 .9 2 2v14c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V3c0-1.1.9-2 2-2zm0 2c0 .55.45 1 1 1s1-.45 1-1-.45-1-1-1-1 .45-1 1z" />
+                </svg>
+                🎯 Key Improvements Made
+            </h2>
+            <div class="demo-grid">
+                <div class="demo-card">
+                    <h3>📱 Enhanced Modal Design</h3>
+                    <p>Complete redesign with professional layout, color-coded sections, and comprehensive information
+                        display.</p>
+                </div>
+                <div class="demo-card">
+                    <h3>📊 Notification History</h3>
+                    <p>New dedicated page for notification management with statistics, filters, and timeline view.</p>
+                </div>
+                <div class="demo-card">
+                    <h3>🔄 Real-time Integration</h3>
+                    <p>Socket.io powered real-time updates with room-based communication and instant notifications.</p>
+                </div>
+                <div class="demo-card">
+                    <h3>💾 Database Integration</h3>
+                    <p>Complete migration from in-memory storage to persistent MySQL database with proper indexing.</p>
+                </div>
+                <div class="demo-card">
+                    <h3>🎨 Professional UI/UX</h3>
+                    <p>Modern design with smooth animations, responsive layout, and intuitive user interactions.</p>
+                </div>
+                <div class="demo-card">
+                    <h3>⚡ Performance Optimized</h3>
+                    <p>Efficient API calls, connection pooling, and optimized rendering for smooth user experience.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2 class="section-title">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                        d="M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.1 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM19 20H5V9h14v11z" />
+                </svg>
+                📈 System Status
+            </h2>
+            <div style="background: white; padding: 20px; border-radius: 10px; border: 2px solid #10b981;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+                    <span style="font-weight: 600; color: #2d3748;">Backend Server</span>
+                    <span class="status-badge">✅ Active</span>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+                    <span style="font-weight: 600; color: #2d3748;">Frontend Server</span>
+                    <span class="status-badge">✅ Running</span>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+                    <span style="font-weight: 600; color: #2d3748;">Socket.io Connections</span>
+                    <span class="status-badge">✅ Active</span>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+                    <span style="font-weight: 600; color: #2d3748;">MySQL Database</span>
+                    <span class="status-badge">✅ Connected</span>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <span style="font-weight: 600; color: #2d3748;">Real-time Notifications</span>
+                    <span class="status-badge">✅ Operational</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2 class="section-title">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                </svg>
+                🎯 Test the Enhanced Features
+            </h2>
+            <p style="margin-bottom: 25px; color: #718096; font-size: 1.1rem;">
+                Follow these steps to experience the complete enhanced notification system:
+            </p>
+            <ol style="list-style: none; padding: 0; counter-reset: step-counter;">
+                <li
+                    style="counter-increment: step-counter; margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; border-left: 4px solid #667eea;">
+                    <strong style="color: #2d3748;">Step 1:</strong> Open AdminLSA and navigate to "Notification
+                    History" tab to see the new notification management interface
+                </li>
+                <li
+                    style="counter-increment: step-counter; margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; border-left: 4px solid #667eea;">
+                    <strong style="color: #2d3748;">Step 2:</strong> Open AdminSPA in another tab and submit a new
+                    therapist registration
+                </li>
+                <li
+                    style="counter-increment: step-counter; margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; border-left: 4px solid #667eea;">
+                    <strong style="color: #2d3748;">Step 3:</strong> Watch AdminLSA receive real-time notification popup
+                    with "View Details" button
+                </li>
+                <li
+                    style="counter-increment: step-counter; margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; border-left: 4px solid #667eea;">
+                    <strong style="color: #2d3748;">Step 4:</strong> Click "View Details" to see the enhanced therapist
+                    modal with comprehensive information
+                </li>
+                <li
+                    style="counter-increment: step-counter; margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; border-left: 4px solid #667eea;">
+                    <strong style="color: #2d3748;">Step 5:</strong> Use approve/reject buttons and see real-time
+                    updates in AdminSPA
+                </li>
+            </ol>
+        </div>
+
+        <div
+            style="text-align: center; margin-top: 40px; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 15px; color: white;">
+            <h3 style="margin-bottom: 15px;">🎉 Enhanced Notification System is Ready!</h3>
+            <p style="margin-bottom: 20px; opacity: 0.9;">
+                Complete bidirectional real-time communication with professional-grade notification management.
+            </p>
+            <div style="display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
+                <a href="http://localhost:5174/adminLSA" class="demo-button"
+                    style="background: rgba(255,255,255,0.2); border: 2px solid white;">Open AdminLSA</a>
+                <a href="http://localhost:5174/test-notifications" class="demo-button"
+                    style="background: rgba(255,255,255,0.2); border: 2px solid white;">Test System</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Add some interactivity
+        document.addEventListener('DOMContentLoaded', function () {
+            const cards = document.querySelectorAll('.demo-card');
+            cards.forEach(card => {
+                card.addEventListener('mouseenter', function () {
+                    this.style.transform = 'translateY(-5px)';
+                    this.style.boxShadow = '0 8px 25px rgba(0,0,0,0.1)';
+                });
+                card.addEventListener('mouseleave', function () {
+                    this.style.transform = 'translateY(0)';
+                    this.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)';
+                });
+            });
+
+            // Add loading animation to buttons
+            const buttons = document.querySelectorAll('.demo-button');
+            buttons.forEach(button => {
+                button.addEventListener('click', function (e) {
+                    if (this.href) {
+                        this.innerHTML = '🚀 Opening...';
+                        this.style.opacity = '0.8';
+                        setTimeout(() => {
+                            this.innerHTML = 'Open';
+                            this.style.opacity = '1';
+                        }, 2000);
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+
+</html>

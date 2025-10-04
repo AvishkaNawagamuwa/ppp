@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const blogController = require('../controllers/blogController');
-const upload = require('../middleware/upload');
+const { upload } = require('../middleware/upload');
 
 // Create a new blog post with file upload
 router.post('/blog', upload.array('media', 10), blogController.createBlogPost);
