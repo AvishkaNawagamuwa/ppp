@@ -22,7 +22,8 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ChatBubbleLeftEllipsisIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  CreditCardIcon
 } from '@heroicons/react/24/outline';
 import {
   FiHome,
@@ -39,9 +40,10 @@ import Swal from 'sweetalert2';
 import io from 'socket.io-client';
 import assets from '../../assets/images/images';
 
-// Import existing components
-import AddBlog from './AddBlog';
-import AddGallery from './AddGallery';
+// Import existing and new components
+import Dashboard from './Dashboard';
+import ManageSpas from './ManageSpas';
+import ThirdPartyLogin from './ThirdPartyLogin';
 
 const AdminLSA = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -102,8 +104,16 @@ const AdminLSA = () => {
 
     setSocket(newSocket);
 
+    // Listen for tab change events from Dashboard quick actions
+    const handleTabChange = (event) => {
+      setActiveTab(event.detail);
+    };
+
+    window.addEventListener('changeTab', handleTabChange);
+
     return () => {
       newSocket.disconnect();
+      window.removeEventListener('changeTab', handleTabChange);
     };
   }, []);
 
@@ -663,33 +673,27 @@ const AdminLSA = () => {
     { id: 'dashboard', label: 'Dashboard', icon: HomeIcon },
     { id: 'spas', label: 'Manage Spas', icon: BuildingOfficeIcon },
     { id: 'therapists', label: 'Manage Therapists', icon: UserGroupIcon },
-    { id: 'notifications', label: 'Notification History', icon: BellIcon },
-    { id: 'media', label: 'Media Gallery', icon: PhotoIcon },
-    { id: 'add-blog', label: 'Add Blog', icon: NewspaperIcon },
-    { id: 'gallery', label: 'Gallery', icon: PhotoIcon },
+    { id: 'financial', label: 'Financial', icon: CreditCardIcon },
     { id: 'third-party', label: 'Third-Party Login', icon: KeyIcon },
+    { id: 'notifications', label: 'Notification History', icon: BellIcon },
   ];
 
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return renderDashboard();
+        return <Dashboard />;
       case 'spas':
-        return renderSpaManagement();
+        return <ManageSpas />;
       case 'therapists':
         return renderTherapistManagement();
+      case 'financial':
+        return renderFinancialOverview();
+      case 'third-party':
+        return <ThirdPartyLogin />;
       case 'notifications':
         return renderNotificationHistory();
-      case 'media':
-        return renderMediaGallery();
-      case 'add-blog':
-        return <AddBlog />;
-      case 'gallery':
-        return <AddGallery />;
-      case 'third-party':
-        return renderThirdPartyLogin();
       default:
-        return renderDashboard();
+        return <Dashboard />;
     }
   };
 
@@ -1383,6 +1387,105 @@ const AdminLSA = () => {
           </button>
         </div>
       )}
+    </div>
+  );
+
+  // Financial Overview Component
+  const renderFinancialOverview = () => (
+    <div>
+      <div className="mb-6 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Financial Overview</h1>
+          <p className="text-gray-600 mt-2">Total revenue, monthly tracking, and financial reports</p>
+        </div>
+        <button
+          onClick={() => window.location.reload()}
+          className="bg-[#0A1428] text-white px-4 py-2 rounded-lg hover:bg-[#0A1428]/90 transition-colors"
+        >
+          Refresh Data
+        </button>
+      </div>
+
+      {/* Financial Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-[#001F3F]">
+          <div className="flex items-center">
+            <div className="p-3 bg-[#FFD700]/20 rounded-lg">
+              <CreditCardIcon className="w-8 h-8 text-[#FFD700]" />
+            </div>
+            <div className="ml-4">
+              <h3 className="text-sm font-medium text-[#001F3F]">Total Registration Fee Paid</h3>
+              <p className="text-3xl font-bold text-[#FFD700]">LKR 2,450,000</p>
+              <div className="text-xs text-gray-500 mt-1">This year</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-[#001F3F]">
+          <div className="flex items-center">
+            <div className="p-3 bg-[#001F3F]/20 rounded-lg">
+              <CreditCardIcon className="w-8 h-8 text-[#001F3F]" />
+            </div>
+            <div className="ml-4">
+              <h3 className="text-sm font-medium text-[#001F3F]">Total Membership Paid</h3>
+              <p className="text-3xl font-bold text-[#FFD700]">LKR 1,890,000</p>
+              <div className="text-xs text-gray-500 mt-1">This year</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Monthly Financial Chart Placeholder */}
+      <div className="bg-white rounded-lg shadow-sm border p-6 mb-8">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+          <ArrowPathIcon className="mr-2 text-[#FFD700] w-5 h-5" />
+          Monthly Financial Overview - 2025
+        </h3>
+        <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
+          <div className="text-center text-gray-500">
+            <ArrowPathIcon className="mx-auto mb-4 opacity-50 w-12 h-12" />
+            <p className="text-lg font-medium">Financial Chart</p>
+            <p className="text-sm">Chart.js integration ready</p>
+            <p className="text-sm">Install Chart.js to see monthly revenue graphs</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Monthly Financial Table */}
+      <div className="bg-white rounded-lg shadow-sm border">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-800">Monthly Breakdown</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead style={{ backgroundColor: '#001F3F', color: 'white' }}>
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Month</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Registration Fees (LKR)</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Membership Fees (LKR)</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Total (LKR)</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {[
+                { month: 'January 2025', registration: 245000, membership: 189000 },
+                { month: 'February 2025', registration: 298000, membership: 203000 },
+                { month: 'March 2025', registration: 267000, membership: 195000 },
+                { month: 'April 2025', registration: 289000, membership: 210000 },
+                { month: 'May 2025', registration: 312000, membership: 225000 },
+                { month: 'June 2025', registration: 278000, membership: 198000 },
+              ].map((row, index) => (
+                <tr key={index} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{row.month}</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">{row.registration.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">{row.membership.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-sm font-medium text-[#FFD700]">{(row.registration + row.membership).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 

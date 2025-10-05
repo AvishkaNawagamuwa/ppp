@@ -3,6 +3,11 @@ const router = express.Router();
 const SpaModel = require('../models/SpaModel');
 const TherapistModel = require('../models/TherapistModel');
 const { therapistUpload } = require('../middleware/upload');
+const db = require('../config/database');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const path = require('path');
 
 // Error handler middleware
 const asyncHandler = (fn) => (req, res, next) => {
@@ -594,8 +599,256 @@ router.use((error, req, res, next) => {
     res.status(500).json({
         success: false,
         message: 'Internal server error',
-        error: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong'
+        error: error.message
     });
+});
+
+// ==================== ENHANCED FEATURES ====================
+
+// Middleware to verify AdminLSA authentication
+const verifyAdminLSA = async (req, res, next) => {
+    try {
+        const token = req.header('Authorization')?.replace('Bearer ', '');
+        if (!token) {
+            return res.status(401).json({ success: false, error: 'Access denied. No token provided.' });
+        }
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+
+        // Verify user exists and is AdminLSA
+        const [user] = await db.execute(
+            'SELECT * FROM admin_users WHERE id = ? AND role = "admin_lsa" AND is_active = 1',
+            [decoded.id]
+        );
+
+        if (user.length === 0) {
+            return res.status(403).json({ success: false, error: 'Access denied. AdminLSA role required.' });
+        }
+
+        req.user = user[0];
+        next();
+    } catch (error) {
+        res.status(401).json({ success: false, error: 'Invalid token.' });
+    }
+};
+
+// Enhanced Dashboard Statistics
+router.get('/enhanced/dashboard/stats', verifyAdminLSA, async (req, res) => {
+    try {
+        const [stats] = await db.execute(`
+      SELECT 
+        (SELECT COUNT(*) FROM spas WHERE status = 'pending') as pending_spas,
+        (SELECT COUNT(*) FROM spas WHERE status = 'verified') as verified_spas,
+        (SELECT COUNT(*) FROM spas WHERE status = 'rejected') as rejected_spas,
+        (SELECT COUNT(*) FROM spas WHERE blacklist_reason IS NOT NULL) as blacklisted_spas,
+        (SELECT COUNT(*) FROM therapists WHERE status = 'pending') as pending_therapists,
+        (SELECT COUNT(*) FROM therapists WHERE status = 'approved') as approved_therapists,
+        (SELECT COUNT(*) FROM admin_users WHERE role = 'government_officer' AND is_active = 1) as active_officers,
+        (SELECT COUNT(*) FROM payments WHERE status = 'pending' AND payment_method = 'bank_transfer') as pending_bank_transfers,
+        (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = 'completed' AND MONTH(created_at) = MONTH(CURDATE())) as monthly_revenue
+    `);
+
+        res.json({
+            success: true,
+            data: stats[0]
+        });
+    } catch (error) {
+        console.error('Error fetching enhanced dashboard stats:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch dashboard statistics' });
+    }
+});
+
+// Financial Dashboard - Monthly Reports
+router.get('/enhanced/financial/monthly', verifyAdminLSA, async (req, res) => {
+    try {
+        const { year = new Date().getFullYear() } = req.query;
+
+        const [financialData] = await db.execute(`
+      SELECT 
+        MONTH(created_at) as month,
+        SUM(CASE WHEN payment_type = 'registration' THEN amount ELSE 0 END) as registration_fees,
+        SUM(CASE WHEN payment_type = 'annual' THEN amount ELSE 0 END) as annual_fees,
+        SUM(CASE WHEN payment_type = 'monthly' THEN amount ELSE 0 END) as monthly_fees,
+        COUNT(*) as total_payments
+      FROM payments 
+      WHERE status = 'completed' AND YEAR(created_at) = ?
+      GROUP BY MONTH(created_at)
+      ORDER BY month
+    `, [year]);
+
+        // Fill in missing months with zero values
+        const monthlyData = Array.from({ length: 12 }, (_, index) => {
+            const month = index + 1;
+            const existingData = financialData.find(d => d.month === month);
+            return existingData || {
+                month,
+                registration_fees: 0,
+                annual_fees: 0,
+                monthly_fees: 0,
+                total_payments: 0
+            };
+        });
+
+        res.json({
+            success: true,
+            data: {
+                year: parseInt(year),
+                monthly_data: monthlyData,
+                summary: {
+                    total_registration: monthlyData.reduce((sum, m) => sum + parseFloat(m.registration_fees || 0), 0),
+                    total_annual: monthlyData.reduce((sum, m) => sum + parseFloat(m.annual_fees || 0), 0),
+                    total_monthly: monthlyData.reduce((sum, m) => sum + parseFloat(m.monthly_fees || 0), 0),
+                    total_payments: monthlyData.reduce((sum, m) => sum + (m.total_payments || 0), 0)
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching financial data:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch financial data' });
+    }
+});
+
+// Enhanced Spa Management - Blacklist functionality
+router.post('/enhanced/spas/:id/blacklist', verifyAdminLSA, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+
+        if (!reason) {
+            return res.status(400).json({ success: false, error: 'Blacklist reason is compulsory' });
+        }
+
+        await db.execute(`
+      UPDATE spas SET 
+        blacklist_reason = ?,
+        blacklisted_at = NOW(),
+        status = 'rejected'
+      WHERE id = ?
+    `, [reason, id]);
+
+        res.json({ success: true, message: 'Spa blacklisted successfully' });
+    } catch (error) {
+        console.error('Error blacklisting spa:', error);
+        res.status(500).json({ success: false, error: 'Failed to blacklist spa' });
+    }
+});
+
+// Third-Party Login Management
+router.get('/enhanced/third-party/accounts', verifyAdminLSA, async (req, res) => {
+    try {
+        const [accounts] = await db.execute(`
+      SELECT id, username, email, full_name, department, is_temporary, expires_at, created_at, last_login, is_active
+      FROM admin_users 
+      WHERE role = 'government_officer'
+      ORDER BY created_at DESC
+    `);
+
+        res.json({ success: true, data: accounts });
+    } catch (error) {
+        console.error('Error fetching third-party accounts:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch accounts' });
+    }
+});
+
+// Create temporary third-party login
+router.post('/enhanced/third-party/create', verifyAdminLSA, async (req, res) => {
+    try {
+        const { username, email, full_name, department, duration_hours = 8 } = req.body;
+
+        // Generate temporary password
+        const tempPassword = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10);
+        const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+        // Calculate expiry time
+        const expiresAt = new Date(Date.now() + (duration_hours * 60 * 60 * 1000));
+
+        const [result] = await db.execute(`
+      INSERT INTO admin_users (
+        username, email, password_hash, role, full_name, department, 
+        is_temporary, expires_at, created_by, is_active
+      ) VALUES (?, ?, ?, 'government_officer', ?, ?, 1, ?, ?, 1)
+    `, [username, email, hashedPassword, full_name, department, expiresAt, req.user.id]);
+
+        res.status(201).json({
+            success: true,
+            message: 'Temporary account created successfully',
+            data: {
+                id: result.insertId,
+                username,
+                temporary_password: tempPassword,
+                expires_at: expiresAt,
+                login_url: '/third-party-login'
+            }
+        });
+    } catch (error) {
+        console.error('Error creating third-party account:', error);
+        if (error.code === 'ER_DUP_ENTRY') {
+            res.status(400).json({ success: false, error: 'Username or email already exists' });
+        } else {
+            res.status(500).json({ success: false, error: 'Failed to create account' });
+        }
+    }
+});
+
+// Delete third-party account
+router.delete('/enhanced/third-party/:id', verifyAdminLSA, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const [result] = await db.execute(`
+      DELETE FROM admin_users 
+      WHERE id = ? AND role = 'government_officer'
+    `, [id]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, error: 'Account not found' });
+        }
+
+        res.json({ success: true, message: 'Account deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting third-party account:', error);
+        res.status(500).json({ success: false, error: 'Failed to delete account' });
+    }
+});
+
+// Bank Transfer Approval
+router.get('/enhanced/payments/bank-transfers', verifyAdminLSA, async (req, res) => {
+    try {
+        const [payments] = await db.execute(`
+      SELECT p.*, s.name as spa_name, s.reference_number, s.owner_fname, s.owner_lname
+      FROM payments p
+      JOIN spas s ON p.spa_id = s.id
+      WHERE p.payment_method = 'bank_transfer' AND p.bank_transfer_approved = 0
+      ORDER BY p.created_at DESC
+    `);
+
+        res.json({ success: true, data: payments });
+    } catch (error) {
+        console.error('Error fetching bank transfers:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch bank transfers' });
+    }
+});
+
+// Approve bank transfer
+router.post('/enhanced/payments/:id/approve', verifyAdminLSA, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { notes } = req.body;
+
+        await db.execute(`
+      UPDATE payments SET 
+        bank_transfer_approved = 1,
+        status = 'completed',
+        approval_date = NOW(),
+        approved_by = ?
+      WHERE id = ? AND payment_method = 'bank_transfer'
+    `, [req.user.full_name, id]);
+
+        res.json({ success: true, message: 'Bank transfer approved successfully' });
+    } catch (error) {
+        console.error('Error approving bank transfer:', error);
+        res.status(500).json({ success: false, error: 'Failed to approve bank transfer' });
+    }
 });
 
 module.exports = router;

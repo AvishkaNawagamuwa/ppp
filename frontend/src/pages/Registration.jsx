@@ -22,8 +22,8 @@ const ProgressIndicator = ({ currentStep }) => {
             {/* Step Circle - Modern premium design */}
             <div
               className={`w-8 h-8 rounded-full flex items-center justify-center mb-4 transition-all duration-500 ease-out ${currentStep >= index + 1
-                  ? "bg-gradient-to-br from-[#0A1428] to-blue-600 text-white shadow-2xl shadow-blue-500/30 transform scale-110 ring-2 ring-blue-700 ring-opacity-30"
-                  : "bg-white border border-gray-200 text-gray-400 shadow-sm"
+                ? "bg-gradient-to-br from-[#0A1428] to-blue-600 text-white shadow-2xl shadow-blue-500/30 transform scale-110 ring-2 ring-blue-700 ring-opacity-30"
+                : "bg-white border border-gray-200 text-gray-400 shadow-sm"
                 } font-semibold relative`}
             >
               {/* Checkmark for completed steps */}
@@ -44,8 +44,8 @@ const ProgressIndicator = ({ currentStep }) => {
             {/* Step Label - Clean modern typography */}
             <div
               className={`text-sm font-medium tracking-wide transition-colors duration-300 ${currentStep >= index + 1
-                  ? "text-gray-900 font-semibold"
-                  : "text-gray-400"
+                ? "text-gray-900 font-semibold"
+                : "text-gray-400"
                 }`}
             >
               {step}
@@ -111,7 +111,7 @@ const InitialStep = ({ onSelect }) => {
   );
 };
 
-// PrerequisitesStep Component - Redesigned
+// PrerequisitesStep Component - Enhanced with new requirements
 const PrerequisitesStep = ({
   prerequisites,
   onPrerequisiteChange,
@@ -122,7 +122,12 @@ const PrerequisitesStep = ({
 
   return (
     <div className="py-8">
-
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold text-primary-dark mb-3">Registration Prerequisites</h2>
+        <p className="text-gray-600 max-w-2xl mx-auto">
+          Please confirm that you have all the required documents ready before proceeding. All items are compulsory for registration.
+        </p>
+      </div>
 
       <div className="bg-gray-50 p-8 rounded-2xl mb-10 border border-gray-200">
         <div className="space-y-5">
@@ -130,33 +135,54 @@ const PrerequisitesStep = ({
             {
               id: "prereq1",
               name: "doc1",
-              label:
-                "Valid Government Issued ID (NIC/Passport/Driving License)",
+              label: "Valid Government Issued ID (NIC/Passport/Driving License)",
+              compulsory: true,
             },
             {
               id: "prereq2",
               name: "doc2",
               label: "Business Registration Certificate",
+              compulsory: true,
             },
             {
               id: "prereq3",
               name: "doc3",
               label: "Tax Registration Documents",
+              compulsory: true,
             },
             {
               id: "prereq4",
               name: "doc4",
               label: "Spa Facility Photos (Minimum 5)",
+              compulsory: true,
             },
             {
               id: "prereq5",
               name: "doc5",
               label: "Professional Certifications of Staff",
+              compulsory: true,
+            },
+            {
+              id: "prereq6",
+              name: "doc6",
+              label: "Form 1: Pvt Thanipudgala Wiyapara > Pvt > Form 1 (Compulsory)",
+              compulsory: true,
+              highlight: true,
+            },
+            {
+              id: "prereq7",
+              name: "doc7",
+              label: "Spa Photos Banner",
+              compulsory: true,
+              highlight: true,
             },
           ].map((item, index) => (
             <div
               key={index}
-              className="flex items-start p-4 rounded-lg bg-white border border-gray-200 hover:border-gold transition-colors duration-300"
+              className={`flex items-start p-4 rounded-lg bg-white border transition-colors duration-300 ${item.highlight
+                  ? 'border-gold-light bg-gold-light bg-opacity-5 hover:border-gold'
+                  : 'border-gray-200 hover:border-gold'
+                }`}
             >
               <div className="flex items-center h-5">
                 <input
@@ -166,13 +192,37 @@ const PrerequisitesStep = ({
                   checked={prerequisites[item.name]}
                   onChange={onPrerequisiteChange}
                   className="w-5 h-5 text-gold focus:ring-gold border-gray-300 rounded"
+                  required
                 />
               </div>
-              <label htmlFor={item.id} className="ml-3 text-gray-700">
+              <label htmlFor={item.id} className="ml-3 text-gray-700 flex-1">
                 {item.label}
+                {item.compulsory && (
+                  <span className="text-red-500 ml-1 font-semibold">*</span>
+                )}
+                {item.highlight && (
+                  <span className="inline-block ml-2 px-2 py-1 text-xs bg-gold text-primary-dark rounded-full font-semibold">
+                    NEW
+                  </span>
+                )}
               </label>
             </div>
           ))}
+        </div>
+
+        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <i className="fas fa-info-circle text-blue-500 mt-1"></i>
+            </div>
+            <div className="ml-3">
+              <h4 className="text-sm font-semibold text-blue-800">Important Notice</h4>
+              <p className="text-sm text-blue-700 mt-1">
+                All documents must be current and valid. Form 1 certificate is mandatory for private entities.
+                Ensure all documents are clear and readable before upload.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -187,8 +237,8 @@ const PrerequisitesStep = ({
           onClick={onNext}
           disabled={!allChecked}
           className={`px-8 py-3 rounded-xl font-semibold transition-all duration-300 flex items-center ${allChecked
-              ? "bg-gradient-to-r from-gold-light to-gold text-primary-dark hover:shadow-lg"
-              : "bg-gray-200 text-gray-500 cursor-not-allowed"
+            ? "bg-gradient-to-r from-gold-light to-gold text-primary-dark hover:shadow-lg"
+            : "bg-gray-200 text-gray-500 cursor-not-allowed"
             }`}
         >
           Continue<i className="fas fa-arrow-right ml-2"></i>
@@ -520,6 +570,78 @@ const UserDetailsStep = ({
                 </div>
               </div>
             </div>
+
+            {/* New Required Documents Section */}
+            <div className="mt-8 p-6 bg-gradient-to-r from-gold-light to-gold bg-opacity-10 rounded-xl border border-gold-light">
+              <h3 className="text-lg font-semibold text-primary-dark mb-4 flex items-center">
+                <i className="fas fa-star text-gold mr-2"></i>
+                Additional Required Documents
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-gray-700 mb-3 font-medium">
+                    Form 1 Certificate Attachment
+                    <span className="text-red-500 ml-1 font-semibold">*</span>
+                  </label>
+                  <div className="border-2 border-dashed border-gold-light rounded-xl p-5 text-center transition-all duration-300 hover:border-gold hover:bg-white">
+                    <i className="fas fa-certificate text-gold text-3xl mb-3"></i>
+                    <p className="text-gray-600 mb-1">
+                      Click to upload or drag and drop
+                    </p>
+                    <p className="text-xs text-gray-400">PDF, DOC (Max 10MB)</p>
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx"
+                      onChange={(e) => onFileUpload(e, "form1Certificate")}
+                      className="hidden"
+                      id="form1Certificate"
+                      required
+                    />
+                    <label
+                      htmlFor="form1Certificate"
+                      className="mt-3 bg-gold text-primary-dark px-5 py-2 rounded-lg inline-block cursor-pointer transition-all duration-300 hover:bg-gold-light font-semibold"
+                    >
+                      Select File
+                    </label>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2 italic">
+                    Required for private entities (Pvt Thanipudgala Wiyapara)
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 mb-3 font-medium">
+                    Spa Photos Banner Attachment
+                    <span className="text-red-500 ml-1 font-semibold">*</span>
+                  </label>
+                  <div className="border-2 border-dashed border-gold-light rounded-xl p-5 text-center transition-all duration-300 hover:border-gold hover:bg-white">
+                    <i className="fas fa-images text-gold text-3xl mb-3"></i>
+                    <p className="text-gray-600 mb-1">
+                      Click to upload or drag and drop
+                    </p>
+                    <p className="text-xs text-gray-400">JPG, PNG (Max 10MB)</p>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => onFileUpload(e, "spaPhotosBanner")}
+                      className="hidden"
+                      id="spaPhotosBanner"
+                      required
+                    />
+                    <label
+                      htmlFor="spaPhotosBanner"
+                      className="mt-3 bg-gold text-primary-dark px-5 py-2 rounded-lg inline-block cursor-pointer transition-all duration-300 hover:bg-gold-light font-semibold"
+                    >
+                      Select File
+                    </label>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2 italic">
+                    High-quality banner image for spa promotion
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -543,8 +665,9 @@ const UserDetailsStep = ({
   );
 };
 
-// PaymentStep Component - Redesigned
+// PaymentStep Component - Enhanced with Card and Bank Transfer Options
 const PaymentStep = ({ onBack, onPaymentSuccess }) => {
+  const [paymentMethod, setPaymentMethod] = useState('card');
   const [saveCard, setSaveCard] = useState(false);
   const [cardNumber, setCardNumber] = useState('');
   const [cardType, setCardType] = useState('');
@@ -604,89 +727,264 @@ const PaymentStep = ({ onBack, onPaymentSuccess }) => {
 
   return (
     <div className="py-0">
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold text-primary-dark mb-3">Payment Details</h2>
+        <p className="text-gray-600 max-w-2xl mx-auto">
+          Choose your preferred payment method to complete the registration process.
+        </p>
+      </div>
+
+      {/* Payment Method Selection */}
+      <div className="mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
+          <div
+            className={`border-2 rounded-xl p-4 cursor-pointer transition-all duration-300 ${paymentMethod === 'card'
+                ? 'border-gold bg-gold bg-opacity-10'
+                : 'border-gray-200 hover:border-gold-light'
+              }`}
+            onClick={() => setPaymentMethod('card')}
+          >
+            <div className="flex items-center">
+              <input
+                type="radio"
+                id="card-payment"
+                name="payment-method"
+                value="card"
+                checked={paymentMethod === 'card'}
+                onChange={() => setPaymentMethod('card')}
+                className="w-5 h-5 text-gold focus:ring-gold border-gray-300"
+              />
+              <label htmlFor="card-payment" className="ml-3 flex items-center cursor-pointer">
+                <i className="fas fa-credit-card text-2xl text-gold mr-3"></i>
+                <div>
+                  <div className="font-semibold text-gray-800">Card Payment</div>
+                  <div className="text-sm text-gray-600">Pay securely with your card</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div
+            className={`border-2 rounded-xl p-4 cursor-pointer transition-all duration-300 ${paymentMethod === 'bank_transfer'
+                ? 'border-gold bg-gold bg-opacity-10'
+                : 'border-gray-200 hover:border-gold-light'
+              }`}
+            onClick={() => setPaymentMethod('bank_transfer')}
+          >
+            <div className="flex items-center">
+              <input
+                type="radio"
+                id="bank-transfer"
+                name="payment-method"
+                value="bank_transfer"
+                checked={paymentMethod === 'bank_transfer'}
+                onChange={() => setPaymentMethod('bank_transfer')}
+                className="w-5 h-5 text-gold focus:ring-gold border-gray-300"
+              />
+              <label htmlFor="bank-transfer" className="ml-3 flex items-center cursor-pointer">
+                <i className="fas fa-university text-2xl text-gold mr-3"></i>
+                <div>
+                  <div className="font-semibold text-gray-800">Bank Transfer</div>
+                  <div className="text-sm text-gray-600">Transfer directly to our account</div>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
         <div className="lg:col-span-2 bg-white border border-gray-200 rounded-2xl p-8">
-          <h3 className="text-xl font-semibold text-primary-dark mb-6 pb-3 border-b border-gray-200">
-            Payment Details
-          </h3>
+          {paymentMethod === 'card' && (
+            <>
+              <h3 className="text-xl font-semibold text-primary-dark mb-6 pb-3 border-b border-gray-200 flex items-center">
+                <i className="fas fa-credit-card text-gold mr-3"></i>
+                Card Payment Details
+              </h3>
 
-          <div className="space-y-6">
-            <div>
-              <label className="block text-gray-700 mb-3 font-medium">
-                Card Number
-              </label>
-              <div className="relative">
-                <i className={`fas ${getCardIcon()} absolute left-4 top-1/2 transform -translate-y-1/2 ${cardType ? 'text-blue-500' : 'text-gray-400'}`}></i>
-                <input
-                  type="text"
-                  value={cardNumber}
-                  onChange={handleCardNumberChange}
-                  placeholder="1234 5678 9012 3456"
-                  className="w-full pl-4 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
-                  maxLength={19} // 16 digits + 3 spaces
-                />
-                {cardNumber && (
-                  <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-sm text-gray-500">
-                    {cardNumber.replace(/\s/g, '').length}/16
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-gray-700 mb-3 font-medium">
+                    Card Number
+                  </label>
+                  <div className="relative">
+                    <i className={`fas ${getCardIcon()} absolute left-4 top-1/2 transform -translate-y-1/2 ${cardType ? 'text-blue-500' : 'text-gray-400'}`}></i>
+                    <input
+                      type="text"
+                      value={cardNumber}
+                      onChange={handleCardNumberChange}
+                      placeholder="1234 5678 9012 3456"
+                      className="w-full pl-4 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
+                      maxLength={19} // 16 digits + 3 spaces
+                    />
+                    {cardNumber && (
+                      <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-sm text-gray-500">
+                        {cardNumber.replace(/\s/g, '').length}/16
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            </div>
+                </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-gray-700 mb-3 font-medium">
-                  Expiry Date
-                </label>
-                <input
-                  type="text"
-                  placeholder="MM/YY"
-                  className="w-full px-5 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 mb-3 font-medium">
-                  CVV
-                </label>
-                <div className="relative">
-                  <i
-                    className="fas fa-question-circle absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 cursor-help"
-                    title="3-digit code on the back of your card"
-                  ></i>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-gray-700 mb-3 font-medium">
+                      Expiry Date
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="MM/YY"
+                      className="w-full px-5 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 mb-3 font-medium">
+                      CVV
+                    </label>
+                    <div className="relative">
+                      <i
+                        className="fas fa-question-circle absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 cursor-help"
+                        title="3-digit code on the back of your card"
+                      ></i>
+                      <input
+                        type="text"
+                        placeholder="123"
+                        className="w-full px-5 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 mb-3 font-medium">
+                    Cardholder Name
+                  </label>
                   <input
                     type="text"
-                    placeholder="123"
+                    placeholder="John Doe"
                     className="w-full px-5 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
                   />
                 </div>
               </div>
-            </div>
 
-            <div>
-              <label className="block text-gray-700 mb-3 font-medium">
-                Cardholder Name
-              </label>
-              <input
-                type="text"
-                placeholder="John Doe"
-                className="w-full px-5 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
-              />
-            </div>
-          </div>
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-gray-700 mb-3 font-medium">
+                    Card Number
+                  </label>
+                  <div className="relative">
+                    <i className={`fas ${getCardIcon()} absolute left-4 top-1/2 transform -translate-y-1/2 ${cardType ? 'text-blue-500' : 'text-gray-400'}`}></i>
+                    <input
+                      type="text"
+                      value={cardNumber}
+                      onChange={handleCardNumberChange}
+                      placeholder="1234 5678 9012 3456"
+                      className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
+                      maxLength={19}
+                    />
+                  </div>
+                </div>
 
-          <div className="mt-8 flex items-center">
-            <input
-              type="checkbox"
-              id="saveCard"
-              checked={saveCard}
-              onChange={() => setSaveCard(!saveCard)}
-              className="mr-3 w-5 h-5 text-gold focus:ring-gold border-gray-300 rounded"
-            />
-            <label htmlFor="saveCard" className="text-gray-700">
-              Save card details for future payments
-            </label>
-          </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-gray-700 mb-3 font-medium">
+                      Expiry Date
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="MM/YY"
+                      className="w-full px-5 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 mb-3 font-medium">
+                      CVV
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="123"
+                      maxLength={3}
+                      className="w-full px-5 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 mb-3 font-medium">
+                    Cardholder Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="John Doe"
+                    className="w-full px-5 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
+                  />
+                </div>
+
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="saveCard"
+                    checked={saveCard}
+                    onChange={() => setSaveCard(!saveCard)}
+                    className="mr-3 w-5 h-5 text-gold focus:ring-gold border-gray-300 rounded"
+                  />
+                  <label htmlFor="saveCard" className="text-gray-700">
+                    Save card details for future payments
+                  </label>
+                </div>
+              </div>
+            </>
+          )}
+
+          {paymentMethod === 'bank_transfer' && (
+            <>
+              <h3 className="text-xl font-semibold text-primary-dark mb-6 pb-3 border-b border-gray-200 flex items-center">
+                <i className="fas fa-university text-gold mr-3"></i>
+                Bank Transfer Details
+              </h3>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-6">
+                <h4 className="font-semibold text-blue-800 mb-3">Bank Account Details</h4>
+                <div className="space-y-2 text-sm text-blue-700">
+                  <div className="flex justify-between">
+                    <span className="font-medium">Bank Name:</span>
+                    <span>Bank of Ceylon</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">Account Name:</span>
+                    <span>Lanka Spa Association</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">Account Number:</span>
+                    <span>123-456-789-001</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">Branch:</span>
+                    <span>Colombo Main Branch</span>
+                  </div>
+                  <div className="flex justify-between font-semibold text-lg text-blue-800 border-t border-blue-200 pt-2 mt-2">
+                    <span>Amount:</span>
+                    <span>LKR 5,000.00</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
+                <div className="flex items-start">
+                  <i className="fas fa-exclamation-triangle text-amber-500 mt-1 mr-3"></i>
+                  <div>
+                    <h4 className="font-semibold text-amber-800 mb-2">Important Instructions</h4>
+                    <ul className="text-sm text-amber-700 space-y-1">
+                      <li>• Transfer the exact amount of LKR 5,000.00</li>
+                      <li>• Use your NIC number as the reference</li>
+                      <li>• Keep the bank slip as proof of payment</li>
+                      <li>• Your registration will be pending until payment is verified</li>
+                      <li>• Verification usually takes 1-2 business days</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="bg-gradient-to-b from-gold-light to-gold rounded-2xl p-8 text-primary-dark">
@@ -755,6 +1053,8 @@ const Registration = () => {
     doc3: false,
     doc4: false,
     doc5: false,
+    doc6: false, // Form 1 certificate
+    doc7: false, // Spa photos banner
   });
 
   const [userDetails, setUserDetails] = useState({

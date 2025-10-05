@@ -13,6 +13,12 @@ const adminLSARoutes = require('./routes/adminLSARoutes');
 const therapistRoutes = require('./routes/therapistRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 
+// Import enhanced routes
+const enhancedRegistrationRoutes = require('./routes/enhancedRegistrationRoutes');
+const thirdPartyRoutes = require('./routes/thirdPartyRoutes');
+const enhancedAdminSPARoutes = require('./routes/enhancedAdminSPARoutes');
+const publicWebsiteRoutes = require('./routes/publicWebsiteRoutes');
+
 // Import database connection
 const db = require('./config/database');
 
@@ -63,6 +69,12 @@ app.use('/api/lsa', adminLSARoutes);
 app.use('/api/lsa', notificationRoutes); // Add notification routes (LSA specific)
 app.use('/api/notifications', notificationRoutes); // Add notification routes (general)
 app.use('/api/therapists', therapistRoutes);
+
+// Enhanced routes
+app.use('/api/enhanced-registration', enhancedRegistrationRoutes);
+app.use('/api/third-party', thirdPartyRoutes);
+app.use('/api/admin-spa-enhanced', enhancedAdminSPARoutes);
+app.use('/api/public', publicWebsiteRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

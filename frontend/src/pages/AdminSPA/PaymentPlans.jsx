@@ -1,12 +1,34 @@
-import React, { useState, useContext } from 'react';
-import { FiCheck, FiStar, FiCalendar, FiCreditCard } from 'react-icons/fi';
+import React, { useState, useContext, useEffect } from 'react';
+import { FiCheck, FiStar, FiCalendar, FiCreditCard, FiUpload, FiAlertCircle, FiDollarSign } from 'react-icons/fi';
 import { SpaContext } from './SpaContext';
+import axios from 'axios';
+import Swal from 'sweetalert2';
 
 const PaymentPlans = () => {
     const [selectedPlan, setSelectedPlan] = useState('annual');
+    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('card');
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [bankTransferProof, setBankTransferProof] = useState(null);
+    const [paymentProcessing, setPaymentProcessing] = useState(false);
+    const [availablePlans, setAvailablePlans] = useState([]);
     const { subscriptionStatus } = useContext(SpaContext);
 
     const currentDate = new Date('2025-10-03');
+
+    useEffect(() => {
+        fetchAvailablePlans();
+    }, []);
+
+    const fetchAvailablePlans = async () => {
+        try {
+            const response = await axios.get('/api/admin-spa-enhanced/payment-plans', {
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            });
+            setAvailablePlans(response.data.plans || []);
+        } catch (error) {
+            console.error('Error fetching payment plans:', error);
+        }
+    };
 
     const plans = [
         {
@@ -82,6 +104,113 @@ const PaymentPlans = () => {
 
     const handleSelectPlan = (planId) => {
         setSelectedPlan(planId);
+    };
+
+    const handlePaymentMethodChange = (method) => {
+        setSelectedPaymentMethod(method);
+    };
+
+    const handleBankTransferUpload = (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            setBankTransferProof(file);
+        }
+    };
+
+    const processCardPayment = async (planData) => {
+        try {
+            setPaymentProcessing(true);
+
+            const response = await axios.post('/api/admin-spa-enhanced/process-payment', {
+                plan_id: planData.id,
+                payment_method: 'card',
+                amount: planData.price
+            }, {
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            });
+
+            if (response.data.success) {
+                // Simulate PayHere integration
+                Swal.fire({
+                    title: 'Payment Successful!',
+                    text: `Your ${planData.name} plan has been activated.`,
+                    icon: 'success',
+                    confirmButtonColor: '#001F3F'
+                });
+                setShowPaymentModal(false);
+            }
+        } catch (error) {
+            console.error('Payment error:', error);
+            Swal.fire({
+                title: 'Payment Failed',
+                text: 'Please try again or contact support.',
+                icon: 'error',
+                confirmButtonColor: '#001F3F'
+            });
+        } finally {
+            setPaymentProcessing(false);
+        }
+    };
+
+    const processBankTransfer = async (planData) => {
+        if (!bankTransferProof) {
+            Swal.fire({
+                title: 'Upload Required',
+                text: 'Please upload proof of bank transfer.',
+                icon: 'warning',
+                confirmButtonColor: '#001F3F'
+            });
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('plan_id', planData.id);
+        formData.append('payment_method', 'bank_transfer');
+        formData.append('amount', planData.price);
+        formData.append('transfer_proof', bankTransferProof);
+
+        try {
+            setPaymentProcessing(true);
+
+            const response = await axios.post('/api/admin-spa-enhanced/process-payment', formData, {
+                headers: {
+                    Authorization: `Bearer ${localStorage.getItem('token')}`,
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+
+            if (response.data.success) {
+                Swal.fire({
+                    title: 'Bank Transfer Submitted',
+                    text: 'Your payment is pending approval by LSA Admin.',
+                    icon: 'info',
+                    confirmButtonColor: '#001F3F'
+                });
+                setShowPaymentModal(false);
+                setBankTransferProof(null);
+            }
+        } catch (error) {
+            console.error('Bank transfer error:', error);
+            Swal.fire({
+                title: 'Upload Failed',
+                text: 'Please try again or contact support.',
+                icon: 'error',
+                confirmButtonColor: '#001F3F'
+            });
+        } finally {
+            setPaymentProcessing(false);
+        }
+    };
+
+    const handlePayNow = () => {
+        const planData = plans.find(p => p.id === selectedPlan);
+        if (!planData) return;
+
+        if (selectedPaymentMethod === 'card') {
+            processCardPayment(planData);
+        } else {
+            processBankTransfer(planData);
+        }
     };
 
     const formatCurrency = (amount) => `LKR ${amount.toLocaleString()}`;
@@ -208,6 +337,96 @@ const PaymentPlans = () => {
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+
+                    {/* Payment Method Selection */}
+                    <div className="mt-6 border-t pt-6">
+                        <h4 className="text-md font-semibold text-gray-800 mb-4">Choose Payment Method</h4>
+                        <div className="grid grid-cols-2 gap-4 mb-6">
+                            <button
+                                onClick={() => handlePaymentMethodChange('card')}
+                                className={`p-4 border-2 rounded-lg transition-all ${selectedPaymentMethod === 'card'
+                                        ? 'border-[#001F3F] bg-blue-50'
+                                        : 'border-gray-200 hover:border-gray-300'
+                                    }`}
+                            >
+                                <FiCreditCard className={`mx-auto mb-2 ${selectedPaymentMethod === 'card' ? 'text-[#001F3F]' : 'text-gray-400'}`} size={24} />
+                                <div className="text-sm font-medium">Card Payment</div>
+                                <div className="text-xs text-gray-500">PayHere Gateway</div>
+                            </button>
+
+                            <button
+                                onClick={() => handlePaymentMethodChange('bank_transfer')}
+                                className={`p-4 border-2 rounded-lg transition-all ${selectedPaymentMethod === 'bank_transfer'
+                                        ? 'border-[#001F3F] bg-blue-50'
+                                        : 'border-gray-200 hover:border-gray-300'
+                                    }`}
+                            >
+                                <FiUpload className={`mx-auto mb-2 ${selectedPaymentMethod === 'bank_transfer' ? 'text-[#001F3F]' : 'text-gray-400'}`} size={24} />
+                                <div className="text-sm font-medium">Bank Transfer</div>
+                                <div className="text-xs text-gray-500">Manual Approval</div>
+                            </button>
+                        </div>
+
+                        {/* Bank Transfer Upload */}
+                        {selectedPaymentMethod === 'bank_transfer' && (
+                            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                                <h5 className="font-medium text-gray-800 mb-2">Bank Transfer Details</h5>
+                                <div className="text-sm text-gray-600 mb-4">
+                                    <p><strong>Bank:</strong> Commercial Bank of Ceylon</p>
+                                    <p><strong>Account Name:</strong> Lanka Spa Association</p>
+                                    <p><strong>Account Number:</strong> 8001234567</p>
+                                    <p><strong>Branch:</strong> Colombo Fort</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Upload Transfer Proof <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="file"
+                                        accept="image/*,.pdf"
+                                        onChange={handleBankTransferUpload}
+                                        className="w-full p-2 border border-gray-300 rounded-lg"
+                                    />
+                                    {bankTransferProof && (
+                                        <p className="text-sm text-green-600 mt-2">
+                                            ✓ File uploaded: {bankTransferProof.name}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Payment Button */}
+                        <button
+                            onClick={handlePayNow}
+                            disabled={paymentProcessing || (selectedPaymentMethod === 'bank_transfer' && !bankTransferProof)}
+                            className="w-full bg-[#001F3F] text-white py-3 px-6 rounded-lg font-semibold hover:bg-opacity-90 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                        >
+                            {paymentProcessing ? (
+                                <div className="flex items-center justify-center">
+                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                                    Processing...
+                                </div>
+                            ) : (
+                                <div className="flex items-center justify-center">
+                                    <FiDollarSign className="mr-2" />
+                                    {selectedPaymentMethod === 'card' ? 'Pay Now' : 'Submit for Approval'}
+                                </div>
+                            )}
+                        </button>
+
+                        {selectedPaymentMethod === 'bank_transfer' && (
+                            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                <div className="flex items-start">
+                                    <FiAlertCircle className="text-yellow-600 mr-2 mt-0.5" size={16} />
+                                    <div className="text-sm text-yellow-800">
+                                        <strong>Note:</strong> Bank transfer payments require manual approval by LSA Admin.
+                                        Your plan will be activated once the payment is verified.
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
