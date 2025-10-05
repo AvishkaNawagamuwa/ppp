@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
+const NotificationModel = require('../models/NotificationModel');
+const ActivityLogModel = require('../models/ActivityLogModel');
 const db = require('../config/database');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
+const multer = require('multer');
+const path = require('path');
 
 // Middleware to verify AdminSPA authentication
 const verifyAdminSPA = async (req, res, next) => {

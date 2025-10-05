@@ -19,6 +19,11 @@ const thirdPartyRoutes = require('./routes/thirdPartyRoutes');
 const enhancedAdminSPARoutes = require('./routes/enhancedAdminSPARoutes');
 const publicWebsiteRoutes = require('./routes/publicWebsiteRoutes');
 
+// Import new enhanced routes
+const enhancedAdminLSARoutes = require('./routes/enhancedAdminLSARoutes');
+const newAdminSPARoutes = require('./routes/newAdminSPARoutes');
+const enhancedThirdPartyRoutes = require('./routes/enhancedThirdPartyRoutes');
+
 // Import database connection
 const db = require('./config/database');
 
@@ -75,6 +80,11 @@ app.use('/api/enhanced-registration', enhancedRegistrationRoutes);
 app.use('/api/third-party', thirdPartyRoutes);
 app.use('/api/admin-spa-enhanced', enhancedAdminSPARoutes);
 app.use('/api/public', publicWebsiteRoutes);
+
+// New enhanced routes for complete connectivity
+app.use('/api/admin-lsa-enhanced', enhancedAdminLSARoutes);
+app.use('/api/admin-spa-new', newAdminSPARoutes);
+app.use('/api/government', enhancedThirdPartyRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
