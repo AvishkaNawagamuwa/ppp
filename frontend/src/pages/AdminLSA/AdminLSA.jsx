@@ -43,7 +43,6 @@ import assets from '../../assets/images/images';
 // Import existing and new components
 import Dashboard from './Dashboard';
 import ManageSpas from './ManageSpas';
-import ThirdPartyLogin from './ThirdPartyLogin';
 
 const AdminLSA = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -111,6 +110,10 @@ const AdminLSA = () => {
 
     window.addEventListener('changeTab', handleTabChange);
 
+    // Load initial data
+    loadDashboardData();
+    loadNotifications();
+
     return () => {
       newSocket.disconnect();
       window.removeEventListener('changeTab', handleTabChange);
@@ -149,6 +152,8 @@ const AdminLSA = () => {
   // Third-party login
   const [thirdPartyCredentials, setThirdPartyCredentials] = useState({ username: '', password: '' });
   const [isThirdPartyLoggedIn, setIsThirdPartyLoggedIn] = useState(false);
+  const [governmentOfficers, setGovernmentOfficers] = useState([]);
+  const [generatedPassword, setGeneratedPassword] = useState('');
 
   // Modal states
   const [showSpaModal, setShowSpaModal] = useState(false);
@@ -201,58 +206,18 @@ const AdminLSA = () => {
   // Check for new notifications
   const checkForNewNotifications = async () => {
     try {
-      const response = await axios.get(`${API_BASE}/lsa/notifications/unread`);
-      if (response.data.success) {
-        const newNotifications = response.data.data;
-        const therapistNotifications = newNotifications.filter(n => n.type === 'therapist_registration');
+      // Get unread count
+      const countResponse = await axios.get(`${API_BASE}/lsa/notifications/unread`);
+      if (countResponse.data.success) {
+        const currentUnreadCount = countResponse.data.data.count;
 
-        if (therapistNotifications.length > 0) {
-          setUnreadNotifications(prev => prev + therapistNotifications.length);
+        // If there are new notifications, refresh the notifications list
+        if (currentUnreadCount > unreadNotifications) {
+          // Load all notifications to get the latest ones
+          await loadNotifications();
 
-          // Show notification for the most recent one
-          const latest = therapistNotifications[0];
-          Swal.fire({
-            title: '🆕 ' + latest.title,
-            text: latest.message,
-            icon: 'success',
-            showCancelButton: true,
-            confirmButtonColor: '#10b981',
-            cancelButtonColor: '#6b7280',
-            confirmButtonText: 'View Details',
-            cancelButtonText: 'Dismiss',
-            toast: true,
-            position: 'top-end',
-            timer: 8000,
-            timerProgressBar: true
-          }).then(async (result) => {
-            if (result.isConfirmed) {
-              // Mark notification as read
-              try {
-                await axios.put(`${API_BASE}/lsa/notifications/${latest.id}/read`);
-              } catch (error) {
-                console.error('Error marking notification as read:', error);
-              }
-
-              // Extract therapist ID from notification data
-              const therapistId = latest.reference_id || latest.therapist_id;
-
-              if (therapistId) {
-                await handleViewTherapistDetails(therapistId);
-              } else {
-                // Fallback to therapists tab if no specific therapist ID
-                setActiveTab('therapists');
-                setTherapistTab('pending');
-              }
-            } else {
-              // Mark as read even if dismissed
-              try {
-                await axios.put(`${API_BASE}/lsa/notifications/${latest.id}/read`);
-                setUnreadNotifications(prev => Math.max(0, prev - 1));
-              } catch (error) {
-                console.error('Error marking notification as read:', error);
-              }
-            }
-          });
+          // Update unread count
+          setUnreadNotifications(currentUnreadCount);
         }
       }
     } catch (error) {
@@ -266,29 +231,13 @@ const AdminLSA = () => {
       const response = await axios.get(`${API_BASE}/lsa/notifications/therapist/${therapistId}`);
       if (response.data.success) {
         setNotificationHistory(response.data.data);
+      } else {
+        setNotificationHistory([]);
       }
     } catch (error) {
       console.error('Error loading notification history:', error);
-      // Return mock data for demo
-      const mockHistory = [
-        {
-          id: 1,
-          type: 'registration',
-          title: 'Registration Submitted',
-          message: 'New therapist registration received',
-          created_at: new Date().toISOString(),
-          is_read: 1
-        },
-        {
-          id: 2,
-          type: 'status_change',
-          title: 'Status Updated',
-          message: 'Therapist status changed to pending',
-          created_at: new Date(Date.now() - 86400000).toISOString(),
-          is_read: 1
-        }
-      ];
-      setNotificationHistory(mockHistory);
+      // Set empty array instead of mock data - show real database state
+      setNotificationHistory([]);
     }
   };
 
@@ -613,12 +562,81 @@ const AdminLSA = () => {
   };
 
   // Handle third-party login
-  const handleThirdPartyLogin = (e) => {
+  const handleThirdPartyLogin = async (e) => {
     e.preventDefault();
-    if (thirdPartyCredentials.username && thirdPartyCredentials.password) {
-      localStorage.setItem('govOfficer', JSON.stringify(thirdPartyCredentials));
-      setIsThirdPartyLoggedIn(true);
-      setSuccess('Temporary government officer login created');
+    if (!thirdPartyCredentials.username || !thirdPartyCredentials.password) {
+      Swal.fire('Error', 'Please fill in all required fields', 'error');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API_BASE}/lsa/third-party/create`, {
+        username: thirdPartyCredentials.username,
+        password: thirdPartyCredentials.password,
+        duration: 8 // 8 hours expiry
+      });
+
+      if (response.data.success) {
+        setGeneratedPassword(response.data.data.temporaryPassword);
+        setIsThirdPartyLoggedIn(true);
+        await loadGovernmentOfficers(); // Refresh the list
+        Swal.fire({
+          title: 'Account Created!',
+          html: `
+            <p><strong>Username:</strong> ${response.data.data.username}</p>
+            <p><strong>Status:</strong> Active</p>
+            <p><strong>Expires:</strong> ${new Date(response.data.data.expiresAt).toLocaleString()}</p>
+            <p class="text-sm text-gray-600 mt-2">Government officer account created successfully!</p>
+          `,
+          icon: 'success',
+          confirmButtonText: 'Got it!'
+        });
+      }
+    } catch (error) {
+      console.error('Error creating government officer account:', error);
+      const errorMessage = error.response?.data?.error || 'Failed to create account';
+      Swal.fire('Error', errorMessage, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load government officer accounts
+  const loadGovernmentOfficers = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/lsa/third-party/accounts`);
+      if (response.data.success) {
+        setGovernmentOfficers(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error loading government officers:', error);
+    }
+  };
+
+  // Delete government officer account
+  const deleteGovernmentOfficer = async (id, username) => {
+    const result = await Swal.fire({
+      title: 'Delete Account?',
+      text: `Are you sure you want to delete the account for ${username}? This action cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (result.isConfirmed) {
+      try {
+        const response = await axios.delete(`${API_BASE}/lsa/third-party/account/${id}`);
+        if (response.data.success) {
+          await loadGovernmentOfficers(); // Refresh the list
+          Swal.fire('Deleted!', 'The account has been deleted.', 'success');
+        }
+      } catch (error) {
+        console.error('Error deleting government officer:', error);
+        Swal.fire('Error', 'Failed to delete account', 'error');
+      }
     }
   };
 
@@ -629,6 +647,8 @@ const AdminLSA = () => {
       loadSpas();
     } else if (activeTab === 'therapists') {
       loadTherapists();
+    } else if (activeTab === 'third-party') {
+      loadGovernmentOfficers();
     }
   }, [activeTab, spaFilters, therapistTab, searchQuery]);
 
@@ -639,10 +659,14 @@ const AdminLSA = () => {
     loadNotifications();
     checkForNewNotifications();
 
-    // Set up polling for new notifications every 10 seconds
+    // Set up polling for new notifications every 5 seconds, more frequent if on notification history
     const notificationInterval = setInterval(() => {
       checkForNewNotifications();
-    }, 10000);
+      // If on notification history page, refresh notifications more frequently
+      if (activeTab === 'notification_history') {
+        loadNotifications();
+      }
+    }, 5000);
 
     // Set up dashboard refresh every 30 seconds
     const dashboardInterval = setInterval(() => {
@@ -689,7 +713,7 @@ const AdminLSA = () => {
       case 'financial':
         return renderFinancialOverview();
       case 'third-party':
-        return <ThirdPartyLogin />;
+        return renderThirdPartyLogin();
       case 'notifications':
         return renderNotificationHistory();
       default:
@@ -1131,6 +1155,31 @@ const AdminLSA = () => {
         <div className="flex space-x-3">
           <button
             onClick={async () => {
+              try {
+                // Mark all unread notifications as read
+                const unreadNotifications = notifications.filter(n => n.is_read === 0);
+
+                for (const notification of unreadNotifications) {
+                  await axios.put(`${API_BASE}/lsa/notifications/${notification.id}/read`);
+                }
+
+                // Refresh notifications
+                await loadNotifications();
+                setUnreadNotifications(0);
+
+                Swal.fire('Success', `Marked ${unreadNotifications.length} notifications as read`, 'success');
+              } catch (error) {
+                console.error('Error marking notifications as read:', error);
+                Swal.fire('Error', 'Failed to mark notifications as read', 'error');
+              }
+            }}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center"
+          >
+            <CheckIcon className="w-4 h-4 mr-2" />
+            Mark All Read
+          </button>
+          <button
+            onClick={async () => {
               await loadNotifications();
               Swal.fire('Success', 'Notifications refreshed', 'success');
             }}
@@ -1158,7 +1207,7 @@ const AdminLSA = () => {
             <CheckIcon className="w-8 h-8 text-green-600" />
             <div className="ml-4">
               <p className="text-2xl font-semibold text-gray-900">
-                {notifications.filter(n => n.read_status === 1).length}
+                {notifications.filter(n => n.is_read === 1).length}
               </p>
               <p className="text-gray-600">Read</p>
             </div>
@@ -1169,7 +1218,7 @@ const AdminLSA = () => {
             <ClockIcon className="w-8 h-8 text-yellow-600" />
             <div className="ml-4">
               <p className="text-2xl font-semibold text-gray-900">
-                {notifications.filter(n => n.read_status === 0).length}
+                {notifications.filter(n => n.is_read === 0).length}
               </p>
               <p className="text-gray-600">Unread</p>
             </div>
@@ -1243,12 +1292,25 @@ const AdminLSA = () => {
             notifications.map((notification) => (
               <div
                 key={notification.notification_id}
-                className={`p-6 hover:bg-gray-50 cursor-pointer transition-colors ${notification.read_status === 0 ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                className={`p-6 hover:bg-gray-50 cursor-pointer transition-colors ${notification.is_read === 0 ? 'bg-blue-50 border-l-4 border-blue-500' : ''
                   }`}
-                onClick={() => {
+                onClick={async () => {
                   setSelectedNotification(notification);
-                  if (notification.data?.therapist_id) {
-                    handleViewTherapistDetails(notification.data.therapist_id);
+
+                  // Mark as read if unread
+                  if (notification.is_read === 0) {
+                    try {
+                      await axios.put(`${API_BASE}/lsa/notifications/${notification.id}/read`);
+                      // Refresh notifications to update the UI
+                      await loadNotifications();
+                      setUnreadNotifications(prev => Math.max(0, prev - 1));
+                    } catch (error) {
+                      console.error('Error marking notification as read:', error);
+                    }
+                  }
+
+                  if (notification.related_entity_id && notification.related_entity_type === 'therapist') {
+                    handleViewTherapistDetails(notification.related_entity_id);
                   }
                 }}
               >
@@ -1264,7 +1326,7 @@ const AdminLSA = () => {
                         <h4 className="text-lg font-medium text-gray-900">
                           {notification.title}
                         </h4>
-                        {notification.read_status === 0 && (
+                        {notification.is_read === 0 && (
                           <span className="bg-blue-500 text-white text-xs px-2 py-1 rounded-full">New</span>
                         )}
                       </div>
@@ -1325,68 +1387,130 @@ const AdminLSA = () => {
         <p className="text-gray-600 mt-2">Create temporary login credentials for government officers</p>
       </div>
 
-      {!isThirdPartyLoggedIn ? (
-        <div className="max-w-md">
-          <form onSubmit={handleThirdPartyLogin} className="bg-white p-6 rounded-lg shadow-sm border">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Create Government Officer Login</h2>
+      {/* Create Government Officer Form */}
+      <div className="max-w-md mb-8">
+        <form onSubmit={handleThirdPartyLogin} className="bg-white p-6 rounded-lg shadow-sm border">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Create New Government Officer Account</h2>
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
-              <input
-                type="text"
-                placeholder="Enter username"
-                value={thirdPartyCredentials.username}
-                onChange={(e) => setThirdPartyCredentials({ ...thirdPartyCredentials, username: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                required
-              />
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-              <input
-                type="password"
-                placeholder="Enter password"
-                value={thirdPartyCredentials.password}
-                onChange={(e) => setThirdPartyCredentials({ ...thirdPartyCredentials, password: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-[#0A1428] text-white py-2 rounded-lg hover:bg-[#0A1428]/90 transition-colors"
-            >
-              Create Login
-            </button>
-          </form>
-        </div>
-      ) : (
-        <div className="bg-white p-6 rounded-lg shadow-sm border max-w-md">
-          <div className="flex items-center mb-4">
-            <CheckIcon className="w-8 h-8 text-green-600 mr-3" />
-            <h2 className="text-xl font-semibold text-gray-900">Login Created Successfully</h2>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
+            <input
+              type="text"
+              placeholder="Enter username (e.g., officer123)"
+              value={thirdPartyCredentials.username}
+              onChange={(e) => setThirdPartyCredentials({ ...thirdPartyCredentials, username: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+              required
+            />
           </div>
-          <p className="text-gray-600 mb-4">
-            Temporary government officer login has been created and stored locally.
-          </p>
-          <div className="bg-gray-50 p-3 rounded">
-            <p className="text-sm"><strong>Username:</strong> {thirdPartyCredentials.username}</p>
-            <p className="text-sm"><strong>Status:</strong> Active</p>
+
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+            <input
+              type="password"
+              placeholder="Enter password"
+              value={thirdPartyCredentials.password || ''}
+              onChange={(e) => setThirdPartyCredentials({ ...thirdPartyCredentials, password: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+              required
+            />
           </div>
+
           <button
-            onClick={() => {
-              setIsThirdPartyLoggedIn(false);
-              setThirdPartyCredentials({ username: '', password: '' });
-              localStorage.removeItem('govOfficer');
-            }}
-            className="mt-4 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+            type="submit"
+            disabled={loading}
+            className="w-full bg-[#0A1428] text-white py-2 rounded-lg hover:bg-[#0A1428]/90 transition-colors disabled:opacity-50"
           >
-            Reset Login
+            {loading ? 'Creating...' : 'Create Government Officer Account'}
           </button>
+        </form>
+      </div>
+
+      {/* Government Officers Table */}
+      <div className="bg-white rounded-lg shadow-sm border">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">Government Officer Accounts</h3>
+          <p className="text-sm text-gray-600 mt-1">Manage temporary access accounts for government officers</p>
         </div>
-      )}
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Username
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Full Name
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Created Date
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Last Login
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {governmentOfficers.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                    No government officer accounts found. Create one above to get started.
+                  </td>
+                </tr>
+              ) : (
+                governmentOfficers.map((officer) => (
+                  <tr key={officer.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{officer.username}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{officer.full_name}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${officer.status === 'active' ? 'bg-green-100 text-green-800' :
+                          officer.status === 'never_logged_in' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                        }`}>
+                        {officer.status === 'never_logged_in' ? 'Never Logged In' :
+                          officer.status.charAt(0).toUpperCase() + officer.status.slice(1)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(officer.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {officer.last_login ? new Date(officer.last_login).toLocaleDateString() : 'Never'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <button
+                        onClick={() => deleteGovernmentOfficer(officer.id, officer.username)}
+                        className="text-red-600 hover:text-red-900 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {governmentOfficers.length > 0 && (
+          <div className="px-6 py-3 border-t border-gray-200 bg-gray-50">
+            <p className="text-sm text-gray-600">
+              Total: {governmentOfficers.length} government officer account{governmentOfficers.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 

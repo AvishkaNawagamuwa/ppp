@@ -6,7 +6,6 @@ const path = require('path');
 require('dotenv').config();
 
 // Import routes
-const blogRoutes = require('./routes/blogRoutes');
 const uploadRoutes = require('./routes/upload');
 const spaRoutes = require('./routes/spaRoutes');
 const adminLSARoutes = require('./routes/adminLSARoutes');
@@ -67,7 +66,6 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/gallery', express.static(path.join(__dirname, 'gallery')));
 
 // API Routes
-app.use('/api', blogRoutes);
 app.use('/api', uploadRoutes);
 app.use('/api/spa', spaRoutes);
 app.use('/api/lsa', adminLSARoutes);

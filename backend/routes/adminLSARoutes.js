@@ -569,6 +569,30 @@ router.get('/notifications', asyncHandler(async (req, res) => {
     }
 }));
 
+/**
+ * @route   GET /api/lsa/notifications/unread
+ * @desc    Get unread notification count
+ * @access  Private (Admin)
+ */
+router.get('/notifications/unread', asyncHandler(async (req, res) => {
+    try {
+        const count = await SpaModel.getUnreadNotificationCount();
+
+        res.json({
+            success: true,
+            data: { count }
+        });
+
+    } catch (error) {
+        console.error('Get unread notifications error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch unread notification count',
+            error: error.message
+        });
+    }
+}));
+
 // ==================== ERROR HANDLING ====================
 
 // Global error handler for this router
@@ -850,5 +874,154 @@ router.post('/enhanced/payments/:id/approve', verifyAdminLSA, async (req, res) =
         res.status(500).json({ success: false, error: 'Failed to approve bank transfer' });
     }
 });
+
+// ==================== THIRD-PARTY GOVERNMENT OFFICER ROUTES ====================
+
+/**
+ * @route   POST /api/lsa/third-party/create
+ * @desc    Create government officer account
+ * @access  Private (Admin)
+ */
+router.post('/third-party/create', asyncHandler(async (req, res) => {
+    try {
+        const { username, password } = req.body;
+
+        if (!username || !password) {
+            return res.status(400).json({
+                success: false,
+                error: 'Username and password are required'
+            });
+        }
+
+        // Check if username already exists
+        const [existingUser] = await db.execute(
+            'SELECT id FROM third_party_users WHERE username = ?',
+            [username]
+        );
+
+        if (existingUser.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Username already exists'
+            });
+        }
+
+        // Hash the provided password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Create government officer account
+        const [result] = await db.execute(`
+            INSERT INTO third_party_users (
+                username, password_hash, full_name, role, 
+                created_by, is_active
+            ) VALUES (?, ?, ?, 'government_officer', ?, true)
+        `, [
+            username,
+            hashedPassword,
+            `Officer ${username}`,
+            1 // Default admin ID
+        ]);
+
+        // Calculate expiration time (8 hours from now)
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + 8);
+
+        res.status(201).json({
+            success: true,
+            message: 'Government officer account created successfully',
+            data: {
+                id: result.insertId,
+                username,
+                department: 'Government Office',
+                expiresAt,
+                status: 'active'
+            }
+        });
+
+    } catch (error) {
+        console.error('Create government officer error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to create government officer account'
+        });
+    }
+}));
+
+/**
+ * @route   GET /api/lsa/third-party/accounts
+ * @desc    Get all government officer accounts
+ * @access  Private (Admin)
+ */
+router.get('/third-party/accounts', asyncHandler(async (req, res) => {
+    try {
+        const [accounts] = await db.execute(`
+            SELECT 
+                id, username, full_name, is_active, 
+                created_at, last_login,
+                CASE 
+                    WHEN is_active = false THEN 'inactive'
+                    WHEN last_login IS NULL THEN 'never_logged_in'
+                    ELSE 'active'
+                END as status
+            FROM third_party_users 
+            WHERE role = 'government_officer'
+            ORDER BY created_at DESC
+        `);
+
+        res.json({
+            success: true,
+            data: accounts
+        });
+
+    } catch (error) {
+        console.error('Fetch government officer accounts error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch accounts'
+        });
+    }
+}));
+
+/**
+ * @route   DELETE /api/lsa/third-party/account/:id
+ * @desc    Delete government officer account
+ * @access  Private (Admin)
+ */
+router.delete('/third-party/account/:id', asyncHandler(async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Check if account exists
+        const [account] = await db.execute(
+            'SELECT username FROM third_party_users WHERE id = ? AND role = "government_officer"',
+            [id]
+        );
+
+        if (account.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Account not found'
+            });
+        }
+
+        // Delete the account
+        await db.execute(
+            'DELETE FROM third_party_users WHERE id = ?',
+            [id]
+        );
+
+        res.json({
+            success: true,
+            message: `Government officer account '${account[0].username}' deleted successfully`
+        });
+
+    } catch (error) {
+        console.error('Delete government officer account error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to delete account'
+        });
+    }
+}));
 
 module.exports = router;

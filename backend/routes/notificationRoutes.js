@@ -19,15 +19,15 @@ router.post('/notifications', async (req, res) => {
 
         // Insert notification into database
         const [result] = await db.execute(
-            `INSERT INTO notifications 
-            (recipient_id, recipient_type, sender_id, title, message, type, reference_id, reference_type, is_read) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-            [recipient_id, recipient_type, sender_id, title, message, type, reference_id, reference_type]
+            `INSERT INTO system_notifications 
+            (recipient_id, recipient_type, title, message, notification_type, related_entity_id, related_entity_type, is_read) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+            [recipient_id || null, recipient_type, title, message, type || 'system_alert', reference_id || null, reference_type || null]
         );
 
         // Get the created notification
         const [notification] = await db.execute(
-            'SELECT * FROM notifications WHERE id = ?',
+            'SELECT * FROM system_notifications WHERE id = ?',
             [result.insertId]
         );
 
@@ -114,7 +114,7 @@ router.put('/notifications/:id/read', async (req, res) => {
         const notificationId = parseInt(req.params.id);
 
         const [result] = await db.execute(
-            'UPDATE notifications SET is_read = 1 WHERE id = ?',
+            'UPDATE system_notifications SET is_read = 1 WHERE id = ?',
             [notificationId]
         );
 
@@ -144,8 +144,8 @@ router.get('/notifications/therapist/:therapistId', async (req, res) => {
         const therapistId = parseInt(req.params.therapistId);
 
         const [notifications] = await db.execute(
-            `SELECT * FROM notifications 
-            WHERE reference_type = 'therapist' AND reference_id = ? 
+            `SELECT * FROM system_notifications 
+            WHERE related_entity_type = 'therapist' AND related_entity_id = ? 
             ORDER BY created_at DESC`,
             [therapistId]
         );
@@ -511,9 +511,9 @@ router.put('/:id/mark-read', async (req, res) => {
         const connection = await db.getConnection();
 
         await connection.execute(`
-            UPDATE notifications 
-            SET read_status = 1 
-            WHERE notification_id = ?
+            UPDATE system_notifications 
+            SET is_read = 1 
+            WHERE id = ?
         `, [notificationId]);
 
         connection.release();

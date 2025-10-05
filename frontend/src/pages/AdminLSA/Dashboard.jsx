@@ -45,21 +45,39 @@ const Dashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const response = await axios.get('/api/admin-lsa/dashboard-stats', {
+      const response = await axios.get('http://localhost:5000/api/lsa/dashboard', {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
-      setDashboardStats(response.data);
+
+      if (response.data.success) {
+        const data = response.data.data;
+        setDashboardStats({
+          total_spas: data.spa_statistics?.total_spas || 0,
+          verified_spas: data.spa_statistics?.verified_spas || 0,
+          unverified_spas: data.spa_statistics?.pending_verification || 0,
+          blacklisted_spas: data.spa_statistics?.rejected_spas || 0,
+          total_therapists: data.therapist_statistics?.total_therapists || 0,
+          pending_spas: data.spa_statistics?.pending_verification || 0,
+          pending_therapists: data.therapist_statistics?.pending_applications || 0,
+          monthly_revenue: 245000, // TODO: Add this to backend
+          annual_revenue: 2850000 // TODO: Add this to backend
+        });
+
+        // Set recent activities
+        setRecentActivity(data.recent_activities || []);
+        console.log('Dashboard data loaded:', data);
+      }
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
       // Use fallback data for demo purposes
       setDashboardStats({
-        total_spas: 45,
-        verified_spas: 32,
-        unverified_spas: 5,
-        blacklisted_spas: 1,
-        total_therapists: 156,
-        pending_spas: 8,
-        pending_therapists: 15,
+        total_spas: 5, // From seeded data
+        verified_spas: 2,
+        unverified_spas: 3,
+        blacklisted_spas: 0,
+        total_therapists: 8, // From seeded data
+        pending_spas: 3,
+        pending_therapists: 3,
         monthly_revenue: 245000,
         annual_revenue: 2850000
       });

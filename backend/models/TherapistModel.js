@@ -126,7 +126,7 @@ class TherapistModel {
             // Update therapist status
             const updateTherapistQuery = `
                 UPDATE therapists 
-                SET status = 'approved', reviewed_at = NOW(), reviewed_by = ?
+                SET status = 'approved', approved_date = NOW(), approved_by = ?
                 WHERE id = ?
             `;
             await connection.execute(updateTherapistQuery, [reviewedBy, therapistId]);
@@ -172,7 +172,7 @@ class TherapistModel {
             // Update therapist status
             const updateTherapistQuery = `
                 UPDATE therapists 
-                SET status = 'rejected', rejection_reason = ?, reviewed_at = NOW(), reviewed_by = ?
+                SET status = 'rejected', reject_reason = ?, approved_date = NOW(), approved_by = ?
                 WHERE id = ?
             `;
             await connection.execute(updateTherapistQuery, [reason, reviewedBy, therapistId]);
@@ -343,6 +343,100 @@ class TherapistModel {
             VALUES (?, ?, ?, ?, ?, ?, ?)
         `;
         await connection.execute(query, [recipientType, recipientId, title, message, type, relatedEntityType, relatedEntityId]);
+    }
+
+    // Get admin statistics for dashboard
+    static async getAdminStats() {
+        try {
+            const [result] = await db.execute(`
+                SELECT 
+                    COUNT(*) as total_therapists,
+                    SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_therapists,
+                    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_applications,
+                    SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected_applications,
+                    SUM(CASE WHEN status = 'resigned' THEN 1 ELSE 0 END) as resigned_therapists,
+                    SUM(CASE WHEN status = 'terminated' THEN 1 ELSE 0 END) as terminated_therapists
+                FROM therapists
+            `);
+            return result[0];
+        } catch (error) {
+            console.error('Error getting therapist admin stats:', error);
+            return {
+                total_therapists: 0,
+                approved_therapists: 0,
+                pending_applications: 0,
+                rejected_applications: 0,
+                resigned_therapists: 0,
+                terminated_therapists: 0
+            };
+        }
+    }
+
+    // Update getAllTherapists method to support filtering and return proper format
+    static async getAllTherapists(filters = {}) {
+        try {
+            let query = `
+                SELECT 
+                    t.*,
+                    s.name as spa_name,
+                    CONCAT(COALESCE(s.owner_fname, ''), ' ', COALESCE(s.owner_lname, '')) as spa_owner_name
+                FROM therapists t 
+                LEFT JOIN spas s ON t.spa_id = s.id
+            `;
+            const params = [];
+            const conditions = [];
+
+            // Handle both old signature (status as string) and new signature (filters object)
+            if (typeof filters === 'string') {
+                // Old signature: getAllTherapists(status)
+                if (filters && filters !== 'all') {
+                    conditions.push('t.status = ?');
+                    params.push(filters);
+                }
+            } else {
+                // New signature: getAllTherapists(filters)
+                if (filters.status && filters.status !== 'all') {
+                    conditions.push('t.status = ?');
+                    params.push(filters.status);
+                }
+
+                if (filters.spa_id) {
+                    conditions.push('t.spa_id = ?');
+                    params.push(filters.spa_id);
+                }
+
+                if (filters.search) {
+                    conditions.push('(t.name LIKE ? OR t.email LIKE ? OR s.name LIKE ?)');
+                    const searchTerm = `%${filters.search}%`;
+                    params.push(searchTerm, searchTerm, searchTerm);
+                }
+            }
+
+            if (conditions.length > 0) {
+                query += ' WHERE ' + conditions.join(' AND ');
+            }
+
+            query += ' ORDER BY t.created_at DESC';
+
+            // Pagination for filters object
+            if (typeof filters === 'object' && filters.limit) {
+                const limit = Math.max(1, parseInt(filters.limit) || 10);
+                query += ` LIMIT ${limit}`;
+
+                if (filters.page && parseInt(filters.page) > 1) {
+                    const offset = (parseInt(filters.page) - 1) * limit;
+                    query += ` OFFSET ${offset}`;
+                }
+            } else {
+                query += ' LIMIT 50'; // Default limit
+            }
+
+            const [therapists] = await db.execute(query, params);
+            return { therapists };
+        } catch (error) {
+            console.error('Error getting all therapists:', error);
+            return { therapists: [] };
+        }
     }
 }
 
