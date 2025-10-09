@@ -748,4 +748,57 @@ router.put('/therapists/:therapistId/status', async (req, res) => {
     }
 });
 
+// Get SPA Profile Data (Step 08)
+router.get('/spa-profile/:spaId', async (req, res) => {
+    try {
+        console.log('🔍 SPA Profile route called with ID:', req.params.spaId);
+        const spaId = req.params.spaId;
+
+        // Get spa profile data from spas table where status = 'verified'
+        console.log('📊 Executing SPA profile query...');
+        const [spaResults] = await db.execute(`
+            SELECT 
+                id,
+                name as spa_name,
+                CONCAT(owner_fname, ' ', owner_lname) as owner_name,
+                email,
+                phone,
+                address,
+                address as district,
+                status,
+                created_at,
+                updated_at
+            FROM spas 
+            WHERE id = ? AND status = 'verified'
+        `, [spaId]);
+
+        console.log('📋 Query results:', spaResults.length, 'rows found');
+
+        if (spaResults.length === 0) {
+            console.log('❌ No verified SPA found for ID:', spaId);
+            return res.status(404).json({
+                success: false,
+                error: 'Verified SPA not found'
+            });
+        }
+
+        const spaProfile = spaResults[0];
+        console.log('✅ Returning SPA profile data for:', spaProfile.spa_name);
+
+        res.json({
+            success: true,
+            data: spaProfile
+        });
+
+    } catch (error) {
+        console.error('❌ Get SPA profile error:', error.message);
+        console.error('Stack trace:', error.stack);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch SPA profile',
+            data: null
+        });
+    }
+});
+
 module.exports = router;
