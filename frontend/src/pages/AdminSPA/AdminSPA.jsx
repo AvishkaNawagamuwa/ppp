@@ -24,7 +24,7 @@ import PaymentPlans from './PaymentPlans';
 import SpaProfile from './SpaProfile';
 import NotificationHistory from './NotificationHistory';
 
-// AddTherapist Component with NNF Flow
+// AddTherapist Component with NNF Flow and Enhanced Validation
 const AddTherapist = () => {
     const [currentStep, setCurrentStep] = useState(1);
     const [formData, setFormData] = useState({
@@ -35,6 +35,8 @@ const AddTherapist = () => {
     });
     const [pendingTherapists, setPendingTherapists] = useState([]);
     const [selectedForBulk, setSelectedForBulk] = useState([]);
+    const [errors, setErrors] = useState({});
+    const [loading, setLoading] = useState(false);
 
     // Camera-specific state for Therapist Image
     const [showCamera, setShowCamera] = useState(false);
@@ -45,41 +47,128 @@ const AddTherapist = () => {
     const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
 
-    const nextStep = () => currentStep < 3 && setCurrentStep(currentStep + 1);
-    const prevStep = () => currentStep > 1 && setCurrentStep(currentStep - 1);
+    // Validation function
+    const validateStep = (step) => {
+        let newErrors = {};
+
+        if (step === 1) {
+            // Step 1: Personal Information validation
+            if (!formData.firstName.trim()) {
+                newErrors.firstName = 'First Name is required';
+            }
+            if (!formData.lastName.trim()) {
+                newErrors.lastName = 'Last Name is required';
+            }
+            if (!formData.birthday) {
+                newErrors.birthday = 'Birthday is required (YYYY-MM-DD)';
+            } else {
+                // Check if birthday is not in future
+                const birthDate = new Date(formData.birthday);
+                const today = new Date();
+                if (birthDate >= today) {
+                    newErrors.birthday = 'Birthday cannot be in the future';
+                }
+                // Check if age is realistic (between 18-65)
+                const age = today.getFullYear() - birthDate.getFullYear();
+                if (age < 18) {
+                    newErrors.birthday = 'Therapist must be at least 18 years old';
+                } else if (age > 65) {
+                    newErrors.birthday = 'Please verify the birth year';
+                }
+            }
+            if (!formData.nic.trim()) {
+                newErrors.nic = 'NIC Number is required';
+            } else if (!/^\d{9}[V|X]$/i.test(formData.nic)) {
+                newErrors.nic = 'Invalid NIC format (9 digits + V/X)';
+            }
+            if (!formData.phone.trim()) {
+                newErrors.phone = 'Phone Number is required';
+            } else if (!/^\+94\d{9}$/.test(formData.phone)) {
+                newErrors.phone = 'Invalid phone format (+94xxxxxxxxx)';
+            }
+        } else if (step === 2) {
+            // Step 2: Document validation
+            if (!attachments.nicFile) {
+                newErrors.nicFile = 'NIC Attachment is required (PDF/JPG/PNG, max 2MB)';
+            }
+            if (!attachments.medicalFile) {
+                newErrors.medicalFile = 'Medical Certificate is required (PDF/JPG/PNG, max 2MB)';
+            }
+            if (!attachments.certificateFile) {
+                newErrors.certificateFile = 'Spa Center Certificate is required (PDF/JPG/PNG, max 2MB)';
+            }
+            if (!attachments.imageFile) {
+                newErrors.imageFile = 'Profile Image is required (JPG/PNG, max 2MB)';
+            }
+        }
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    const nextStep = () => {
+        if (validateStep(currentStep)) {
+            if (currentStep < 3) {
+                setCurrentStep(currentStep + 1);
+            }
+        }
+    };
+
+    const prevStep = () => {
+        if (currentStep > 1) {
+            setCurrentStep(currentStep - 1);
+            setErrors({}); // Clear errors when going back
+        }
+    };
 
     const handleInputChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
+        const { name, value } = e.target;
+        setFormData({ ...formData, [name]: value });
+
+        // Clear error when user starts typing
+        if (errors[name]) {
+            setErrors(prev => ({ ...prev, [name]: null }));
+        }
     };
 
     const handleFileChange = (e, type) => {
         const file = e.target.files[0];
-        if (file && ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
-            if (type === 'imageFile') {
-                // Special handling for image file with preview
-                if (file.size > 5 * 1024 * 1024) { // 5MB limit
-                    Swal.fire({
-                        title: 'File Too Large',
-                        text: 'Please select an image under 5MB',
-                        icon: 'error',
-                        confirmButtonColor: '#0A1428'
-                    });
-                    return;
-                }
-                setAttachments({ ...attachments, [type]: file });
-                const reader = new FileReader();
-                reader.onload = (e) => setImagePreview(e.target.result);
-                reader.readAsDataURL(file);
-            } else {
-                setAttachments({ ...attachments, [type]: file });
-            }
-        } else {
+        if (!file) return;
+
+        // File size validation (2MB limit)
+        if (file.size > 2 * 1024 * 1024) {
             Swal.fire({
-                title: 'Invalid File',
+                title: 'File Too Large',
+                text: 'Please select a file under 2MB',
+                icon: 'error',
+                confirmButtonColor: '#0A1428'
+            });
+            return;
+        }
+
+        // File type validation
+        const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+        if (!allowedTypes.includes(file.type)) {
+            Swal.fire({
+                title: 'Invalid File Type',
                 text: 'Please select a valid file (PDF, PNG, JPG)',
                 icon: 'error',
                 confirmButtonColor: '#0A1428'
             });
+            return;
+        }
+
+        // Clear any existing error for this field
+        setErrors(prev => ({ ...prev, [type]: null }));
+
+        if (type === 'imageFile') {
+            // Special handling for image file with preview
+            setAttachments({ ...attachments, [type]: file });
+            const reader = new FileReader();
+            reader.onload = (e) => setImagePreview(e.target.result);
+            reader.readAsDataURL(file);
+        } else {
+            setAttachments({ ...attachments, [type]: file });
         }
     };
 
@@ -203,6 +292,13 @@ const AddTherapist = () => {
     };
 
     const handleSubmit = async () => {
+        // Final validation before submit
+        if (!validateStep(2)) {
+            return;
+        }
+
+        setLoading(true);
+
         try {
             // Create FormData for file uploads
             const formDataToSend = new FormData();
@@ -211,21 +307,24 @@ const AddTherapist = () => {
             formDataToSend.append('birthday', formData.birthday);
             formDataToSend.append('nic', formData.nic);
             formDataToSend.append('phone', formData.phone);
-            formDataToSend.append('spa_id', 1); // Assuming spa_id 1 for now
+
+            // Get spa_id from localStorage or use default
+            const spaId = localStorage.getItem('spa_id') || '1';
+            formDataToSend.append('spa_id', spaId);
             formDataToSend.append('name', `${formData.firstName} ${formData.lastName}`);
             formDataToSend.append('email', `${formData.firstName.toLowerCase()}.${formData.lastName.toLowerCase()}@spa.com`);
             formDataToSend.append('address', 'Spa Location'); // Default address
-            formDataToSend.append('experience_years', 0);
+            formDataToSend.append('experience_years', '0');
             formDataToSend.append('specializations', JSON.stringify(['General Therapy']));
 
-            // Append files if they exist
-            if (attachments.nicFile) formDataToSend.append('nicFile', attachments.nicFile);
-            if (attachments.medicalFile) formDataToSend.append('medicalFile', attachments.medicalFile);
-            if (attachments.certificateFile) formDataToSend.append('certificate', attachments.certificateFile);
-            if (attachments.imageFile) formDataToSend.append('profileImage', attachments.imageFile);
+            // Append files (all are required at this point due to validation)
+            formDataToSend.append('nicFile', attachments.nicFile);
+            formDataToSend.append('medicalFile', attachments.medicalFile);
+            formDataToSend.append('certificateFile', attachments.certificateFile);
+            formDataToSend.append('profileImage', attachments.imageFile);
 
-            // Send to backend
-            const response = await fetch('http://localhost:5000/api/therapists/register', {
+            // Send to the NEW backend endpoint
+            const response = await fetch('/api/admin-spa-new/add-therapist', {
                 method: 'POST',
                 body: formDataToSend
             });
@@ -235,7 +334,7 @@ const AddTherapist = () => {
             if (result.success) {
                 // Add to local pending list for immediate UI update
                 const newTherapist = {
-                    id: result.data.id,
+                    id: result.therapist_id,
                     ...formData,
                     attachments,
                     addedDate: new Date().toLocaleDateString(),
@@ -243,53 +342,48 @@ const AddTherapist = () => {
                 };
                 setPendingTherapists([...pendingTherapists, newTherapist]);
 
-                // Send notification to AdminLSA
-                await fetch('http://localhost:5000/api/lsa/notifications', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        recipient_id: 1, // LSA admin ID
-                        recipient_type: 'admin_lsa',
-                        title: 'New Therapist Registration',
-                        message: `New therapist "${formData.firstName} ${formData.lastName}" has registered and is pending approval.`,
-                        type: 'therapist_registration',
-                        reference_id: result.data.id,
-                        reference_type: 'therapist'
-                    })
-                });
-
                 Swal.fire({
                     title: 'Success!',
-                    text: 'Therapist registration submitted successfully! AdminLSA has been notified.',
+                    text: 'Therapist added successfully! Sent to AdminLSA for approval.',
                     icon: 'success',
                     confirmButtonColor: '#0A1428'
                 });
+
+                // Reset form on success
+                setCurrentStep(1);
+                setFormData({ firstName: '', lastName: '', birthday: '', nic: '', phone: '' });
+                setAttachments({ nicFile: null, medicalFile: null, certificateFile: null, imageFile: null });
+                setImagePreview(null);
+                setErrors({});
+                setShowCamera(false);
+                setCameraLoading(false);
+                if (cameraStream) {
+                    cameraStream.getTracks().forEach(track => track.stop());
+                    setCameraStream(null);
+                }
             } else {
                 throw new Error(result.message || 'Registration failed');
             }
         } catch (error) {
             console.error('Error submitting therapist:', error);
+            let errorMessage = 'Failed to submit therapist registration. Please try again.';
+
+            if (error.message.includes('Invalid NIC')) {
+                errorMessage = 'Invalid NIC format. Please use format: 123456789V or 123456789X';
+            } else if (error.message.includes('Invalid phone')) {
+                errorMessage = 'Invalid phone format. Please use format: +94771234567';
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+
             Swal.fire({
                 title: 'Error!',
-                text: error.message || 'Failed to submit therapist registration. Please try again.',
+                text: errorMessage,
                 icon: 'error',
                 confirmButtonColor: '#d33'
             });
-            return; // Don't reset form on error
-        }
-
-        // Reset form only on success
-        setCurrentStep(1);
-        setFormData({ firstName: '', lastName: '', birthday: '', nic: '', phone: '' });
-        setAttachments({ nicFile: null, medicalFile: null, certificateFile: null, imageFile: null });
-        setImagePreview(null);
-        setShowCamera(false);
-        setCameraLoading(false);
-        if (cameraStream) {
-            cameraStream.getTracks().forEach(track => track.stop());
-            setCameraStream(null);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -370,46 +464,67 @@ const AddTherapist = () => {
                         <div className="space-y-6">
                             <h3 className="text-xl font-semibold text-gray-800">Personal Information</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <input
-                                    type="text"
-                                    name="firstName"
-                                    placeholder="First Name"
-                                    value={formData.firstName}
-                                    onChange={handleInputChange}
-                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
-                                />
-                                <input
-                                    type="text"
-                                    name="lastName"
-                                    placeholder="Last Name"
-                                    value={formData.lastName}
-                                    onChange={handleInputChange}
-                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
-                                />
-                                <input
-                                    type="date"
-                                    name="birthday"
-                                    placeholder="Birthday"
-                                    value={formData.birthday}
-                                    onChange={handleInputChange}
-                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
-                                />
-                                <input
-                                    type="text"
-                                    name="nic"
-                                    placeholder="NIC Number"
-                                    value={formData.nic}
-                                    onChange={handleInputChange}
-                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
-                                />
-                                <input
-                                    type="tel"
-                                    name="phone"
-                                    placeholder="Phone Number"
-                                    value={formData.phone}
-                                    onChange={handleInputChange}
-                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
-                                />
+                                <div>
+                                    <input
+                                        type="text"
+                                        name="firstName"
+                                        placeholder="First Name"
+                                        value={formData.firstName}
+                                        onChange={handleInputChange}
+                                        className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none ${errors.firstName ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                            }`}
+                                    />
+                                    {errors.firstName && <span className="text-red-500 text-sm mt-1 block">{errors.firstName}</span>}
+                                </div>
+                                <div>
+                                    <input
+                                        type="text"
+                                        name="lastName"
+                                        placeholder="Last Name"
+                                        value={formData.lastName}
+                                        onChange={handleInputChange}
+                                        className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none ${errors.lastName ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                            }`}
+                                    />
+                                    {errors.lastName && <span className="text-red-500 text-sm mt-1 block">{errors.lastName}</span>}
+                                </div>
+                                <div>
+                                    <input
+                                        type="date"
+                                        name="birthday"
+                                        placeholder="Birthday"
+                                        value={formData.birthday}
+                                        onChange={handleInputChange}
+                                        className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none ${errors.birthday ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                            }`}
+                                    />
+                                    {errors.birthday && <span className="text-red-500 text-sm mt-1 block">{errors.birthday}</span>}
+                                </div>
+                                <div>
+                                    <input
+                                        type="text"
+                                        name="nic"
+                                        placeholder="NIC Number (123456789V)"
+                                        value={formData.nic}
+                                        onChange={handleInputChange}
+                                        maxLength="10"
+                                        className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none ${errors.nic ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                            }`}
+                                    />
+                                    {errors.nic && <span className="text-red-500 text-sm mt-1 block">{errors.nic}</span>}
+                                </div>
+                                <div className="md:col-span-1">
+                                    <input
+                                        type="tel"
+                                        name="phone"
+                                        placeholder="Phone Number (+94771234567)"
+                                        value={formData.phone}
+                                        onChange={handleInputChange}
+                                        className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none ${errors.phone ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                            }`}
+                                    />
+                                    {errors.phone && <span className="text-red-500 text-sm mt-1 block">{errors.phone}</span>}
+                                </div>
                             </div>
                         </div>
                     )}
@@ -552,36 +667,49 @@ const AddTherapist = () => {
                             {/* Other Document Attachments - Below Image Module */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium text-gray-700">NIC Attachment (PDF, PNG, JPG)</label>
+                                    <label className="text-sm font-medium text-gray-700">NIC Attachment (PDF, PNG, JPG) *</label>
                                     <input
                                         type="file"
                                         accept=".pdf,.png,.jpg,.jpeg"
                                         onChange={(e) => handleFileChange(e, 'nicFile')}
-                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
+                                        className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none ${errors.nicFile ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                            }`}
                                     />
-                                    {attachments.nicFile && <p className="text-sm text-green-600">✓ {attachments.nicFile.name}</p>}
+                                    {errors.nicFile && <p className="text-sm text-red-500">✗ {errors.nicFile}</p>}
+                                    {attachments.nicFile && !errors.nicFile && <p className="text-sm text-green-600">✓ {attachments.nicFile.name}</p>}
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium text-gray-700">Medical Certificate (PDF, PNG, JPG)</label>
+                                    <label className="text-sm font-medium text-gray-700">Medical Certificate (PDF, PNG, JPG) *</label>
                                     <input
                                         type="file"
                                         accept=".pdf,.png,.jpg,.jpeg"
                                         onChange={(e) => handleFileChange(e, 'medicalFile')}
-                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
+                                        className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none ${errors.medicalFile ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                            }`}
                                     />
-                                    {attachments.medicalFile && <p className="text-sm text-green-600">✓ {attachments.medicalFile.name}</p>}
+                                    {errors.medicalFile && <p className="text-sm text-red-500">✗ {errors.medicalFile}</p>}
+                                    {attachments.medicalFile && !errors.medicalFile && <p className="text-sm text-green-600">✓ {attachments.medicalFile.name}</p>}
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium text-gray-700">Spa Center Certificate (PDF, PNG, JPG)</label>
+                                    <label className="text-sm font-medium text-gray-700">Spa Center Certificate (PDF, PNG, JPG) *</label>
                                     <input
                                         type="file"
                                         accept=".pdf,.png,.jpg,.jpeg"
                                         onChange={(e) => handleFileChange(e, 'certificateFile')}
-                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
+                                        className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none ${errors.certificateFile ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                            }`}
                                     />
-                                    {attachments.certificateFile && <p className="text-sm text-green-600">✓ {attachments.certificateFile.name}</p>}
+                                    {errors.certificateFile && <p className="text-sm text-red-500">✗ {errors.certificateFile}</p>}
+                                    {attachments.certificateFile && !errors.certificateFile && <p className="text-sm text-green-600">✓ {attachments.certificateFile.name}</p>}
                                 </div>
                             </div>
+
+                            {/* Profile Image Error */}
+                            {errors.imageFile && (
+                                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4">
+                                    <p className="text-sm text-red-600">✗ {errors.imageFile}</p>
+                                </div>
+                            )}
                         </div>
                     )}
                     {currentStep === 3 && (
@@ -646,8 +774,22 @@ const AddTherapist = () => {
                             Next <FiChevronLeft className="ml-2 rotate-180" />
                         </button>
                     ) : (
-                        <button onClick={handleSubmit} className="flex items-center px-8 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700">
-                            Add to Pending List
+                        <button
+                            onClick={handleSubmit}
+                            disabled={loading}
+                            className={`flex items-center px-8 py-3 rounded-lg font-medium ${loading
+                                    ? 'bg-gray-400 text-white cursor-not-allowed'
+                                    : 'bg-green-600 text-white hover:bg-green-700'
+                                }`}
+                        >
+                            {loading ? (
+                                <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                                    Saving...
+                                </>
+                            ) : (
+                                'Add to Pending List'
+                            )}
                         </button>
                     )}
                 </div>
@@ -720,33 +862,143 @@ const AddTherapist = () => {
     );
 };
 
-// ViewTherapists Component
+// Status helper functions
+const getStatusColor = (status) => {
+    switch (status?.toLowerCase()) {
+        case 'approved':
+            return 'bg-green-100 text-green-800';
+        case 'pending':
+            return 'bg-yellow-100 text-yellow-800';
+        case 'rejected':
+            return 'bg-red-100 text-red-800';
+        case 'resigned':
+            return 'bg-gray-100 text-gray-800';
+        case 'terminated':
+            return 'bg-purple-100 text-purple-800';
+        case 'suspend':
+        case 'suspended':
+            return 'bg-orange-100 text-orange-800';
+        default:
+            return 'bg-gray-100 text-gray-800';
+    }
+};
+
+const getDisplayStatus = (status) => {
+    switch (status?.toLowerCase()) {
+        case 'suspend':
+            return 'Suspended';
+        default:
+            return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown';
+    }
+};
+
+// ViewTherapists Component - Dynamic Database Integration
 const ViewTherapists = () => {
-    const [activeTab, setActiveTab] = useState('Approved');
+    const [activeTab, setActiveTab] = useState('approved');
     const [searchTerm, setSearchTerm] = useState('');
     const [showModal, setShowModal] = useState(false);
     const [selectedTherapist, setSelectedTherapist] = useState(null);
+    const [therapists, setTherapists] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
 
-    const therapists = {
-        Approved: [
-            { id: 1, name: 'Dr. Amara Silva', email: 'amara@spa.com', nic: '199412345678', phone: '+94 77 123 4567', specialization: 'Swedish Massage', status: 'Active', experience: '5 years', photo: '/api/placeholder/150/150' },
-            { id: 4, name: 'Saman Kumara', email: 'saman@spa.com', nic: '198712345679', phone: '+94 77 222 3333', specialization: 'Aromatherapy', status: 'Active', experience: '4 years', photo: '/api/placeholder/150/150' }
-        ],
-        Pending: [
-            { id: 2, name: 'Priya Fernando', email: 'priya@spa.com', nic: '199012345679', phone: '+94 77 987 6543', specialization: 'Deep Tissue', status: 'Pending Review', experience: '3 years', photo: '/api/placeholder/150/150' },
-            { id: 5, name: 'Nimal Perera', email: 'nimal@spa.com', nic: '199212345680', phone: '+94 77 444 5555', specialization: 'Hot Stone', status: 'Pending Review', experience: '2 years', photo: '/api/placeholder/150/150' }
-        ],
-        Rejected: [
-            { id: 3, name: 'Kasun Perera', email: 'kasun@spa.com', nic: '198912345680', phone: '+94 77 555 0123', specialization: 'Thai Massage', status: 'Rejected', experience: '7 years', photo: '/api/placeholder/150/150', rejectionReason: 'Incomplete certification documents' },
-            { id: 6, name: 'Ruwan Silva', email: 'ruwan@spa.com', nic: '199112345681', phone: '+94 77 666 7777', specialization: 'Reflexology', status: 'Rejected', experience: '3 years', photo: '/api/placeholder/150/150', rejectionReason: 'Medical certificate expired' }
-        ]
+    // Get spa_id from localStorage or use default
+    const spaId = localStorage.getItem('spa_id') || '1';
+
+    // Fetch therapists from database
+    const fetchTherapists = async (status = 'all') => {
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await fetch(`/api/admin-spa-new/spas/${spaId}/therapists?status=${status}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                setTherapists(data.therapists || []);
+            } else {
+                setError('Failed to fetch therapists');
+                setTherapists([]);
+            }
+        } catch (err) {
+            console.error('Error fetching therapists:', err);
+            setError('Network error. Please check your connection.');
+            setTherapists([]);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const filteredTherapists = therapists[activeTab].filter(therapist =>
-        therapist.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        therapist.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        therapist.nic.includes(searchTerm)
-    );
+    // Load therapists when component mounts or tab changes
+    useEffect(() => {
+        fetchTherapists(activeTab === 'all' ? 'all' : activeTab);
+    }, [activeTab, spaId]);
+
+    // Map database status to display status
+    const getDisplayStatus = (dbStatus) => {
+        const statusMap = {
+            'approved': 'Active',
+            'pending': 'Pending Review', 
+            'rejected': 'Rejected',
+            'resigned': 'Resigned',
+            'terminated': 'Terminated',
+            'suspend': 'Suspended'
+        };
+        return statusMap[dbStatus] || dbStatus;
+    };
+
+    // Format therapist data for display
+    const formatTherapist = (therapist) => ({
+        id: therapist.id,
+        name: therapist.first_name && therapist.last_name 
+            ? `${therapist.first_name} ${therapist.last_name}` 
+            : therapist.name || 'Unknown',
+        email: therapist.email,
+        nic: therapist.nic_number || therapist.nic,
+        phone: therapist.phone,
+        specialization: Array.isArray(therapist.specializations) 
+            ? therapist.specializations.join(', ') 
+            : (therapist.specializations ? JSON.parse(therapist.specializations || '[]').join(', ') : 'General Therapy'),
+        status: getDisplayStatus(therapist.status),
+        dbStatus: therapist.status,
+        experience: `${therapist.experience_years || 0} years`,
+        photo: therapist.therapist_image || '/api/placeholder/150/150',
+        rejectionReason: therapist.reject_reason,
+        dateOfBirth: therapist.date_of_birth,
+        address: therapist.address,
+        createdAt: therapist.created_at,
+        updatedAt: therapist.updated_at
+    });
+
+    // Filter therapists based on search term and active tab
+    const filteredTherapists = therapists
+        .map(formatTherapist)
+        .filter(therapist => {
+            const matchesSearch = 
+                therapist.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                therapist.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                therapist.nic.includes(searchTerm) ||
+                therapist.specialization.toLowerCase().includes(searchTerm.toLowerCase());
+            
+            const matchesTab = therapist.dbStatus === activeTab;
+            
+            return matchesSearch && matchesTab;
+        });
+
+    // Get therapist counts for each tab
+    const getTherapistCounts = () => {
+        const counts = {
+            approved: therapists.filter(t => t.status === 'approved').length,
+            pending: therapists.filter(t => t.status === 'pending').length,
+            rejected: therapists.filter(t => t.status === 'rejected').length,
+            resigned: therapists.filter(t => t.status === 'resigned').length,
+            terminated: therapists.filter(t => t.status === 'terminated').length,
+            suspended: therapists.filter(t => t.status === 'suspend').length
+        };
+        counts.all = Object.values(counts).reduce((sum, count) => sum + count, 0);
+        return counts;
+    };
+
+    const counts = getTherapistCounts();
 
     const viewDetails = (therapist) => {
         setSelectedTherapist(therapist);
@@ -776,20 +1028,51 @@ const ViewTherapists = () => {
                 </div>
 
                 {/* Tab Navigation */}
-                <div className="flex border-b border-gray-200 mb-6">
-                    {['Approved', 'Pending', 'Rejected'].map(tab => (
+                <div className="flex border-b border-gray-200 mb-6 overflow-x-auto">
+                    {[
+                        { key: 'approved', label: 'Approved' },
+                        { key: 'pending', label: 'Pending' },
+                        { key: 'rejected', label: 'Rejected' },
+                        { key: 'resigned', label: 'Resigned' },
+                        { key: 'terminated', label: 'Terminated' },
+                        { key: 'suspended', label: 'Suspended' }
+                    ].map(tab => (
                         <button
-                            key={tab}
-                            onClick={() => setActiveTab(tab)}
-                            className={`px-6 py-3 font-medium transition-colors duration-200 ${activeTab === tab
+                            key={tab.key}
+                            onClick={() => setActiveTab(tab.key)}
+                            className={`px-6 py-3 font-medium transition-colors duration-200 whitespace-nowrap ${activeTab === tab.key
                                 ? 'border-b-2 border-[#D4AF37] text-[#D4AF37]'
                                 : 'text-gray-600 hover:text-gray-800'
                                 }`}
                         >
-                            {tab} ({therapists[tab].length})
+                            {tab.label} ({counts[tab.key] || 0})
                         </button>
                     ))}
                 </div>
+
+                {/* Loading State */}
+                {loading && (
+                    <div className="flex justify-center items-center py-12">
+                        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#0A1428] border-t-transparent"></div>
+                        <span className="ml-2 text-gray-600">Loading therapists...</span>
+                    </div>
+                )}
+
+                {/* Error State */}
+                {error && !loading && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                        <div className="flex items-center">
+                            <FiX className="text-red-500 mr-2" size={20} />
+                            <p className="text-red-700">{error}</p>
+                            <button
+                                onClick={() => fetchTherapists(activeTab)}
+                                className="ml-auto text-red-600 hover:text-red-800 font-medium"
+                            >
+                                Retry
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* Therapists Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

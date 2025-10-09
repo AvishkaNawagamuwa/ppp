@@ -283,12 +283,37 @@ router.get('/spas/:spaId/therapists', async (req, res) => {
 
         const [therapists] = await db.execute(query, params);
 
-        // Parse JSON fields
-        const enrichedTherapists = therapists.map(therapist => ({
-            ...therapist,
-            specializations: JSON.parse(therapist.specializations || '[]'),
-            working_history: JSON.parse(therapist.working_history || '[]')
-        }));
+        // Parse JSON fields safely
+        const enrichedTherapists = therapists.map(therapist => {
+            let specializations;
+            try {
+                // Try to parse as JSON first
+                specializations = JSON.parse(therapist.specializations || '[]');
+            } catch (e) {
+                // If parsing fails, treat as comma-separated string or single value
+                if (therapist.specializations) {
+                    const specString = String(therapist.specializations);
+                    specializations = specString.includes(',') 
+                        ? specString.split(',').map(s => s.trim())
+                        : [specString.trim()];
+                } else {
+                    specializations = [];
+                }
+            }
+
+            let working_history;
+            try {
+                working_history = JSON.parse(therapist.working_history || '[]');
+            } catch (e) {
+                working_history = [];
+            }
+
+            return {
+                ...therapist,
+                specializations,
+                working_history
+            };
+        });
 
         res.json({
             success: true,
@@ -303,7 +328,170 @@ router.get('/spas/:spaId/therapists', async (req, res) => {
     }
 });
 
-// Add new therapist request
+// Add new therapist request - Enhanced with all fields and validation
+router.post('/add-therapist', upload.fields([
+    { name: 'nicFile', maxCount: 1 },
+    { name: 'medicalFile', maxCount: 1 },
+    { name: 'certificateFile', maxCount: 1 },
+    { name: 'profileImage', maxCount: 1 }
+]), async (req, res) => {
+    try {
+        const {
+            firstName, lastName, birthday, nic, phone, spa_id,
+            name, email, address, experience_years, specializations
+        } = req.body;
+
+        // Validation (server-side)
+        if (!firstName || !lastName || !birthday || !nic || !phone) {
+            return res.status(400).json({
+                success: false,
+                message: 'All personal fields (firstName, lastName, birthday, NIC, phone) are required'
+            });
+        }
+
+        // NIC format validation (9 digits + V/X)
+        if (!/^\d{9}[V|X]$/i.test(nic)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid NIC format. Must be 9 digits followed by V or X'
+            });
+        }
+
+        // Phone format validation (+94xxxxxxxxx)
+        if (!/^\+94\d{9}$/.test(phone)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid phone format. Must be +94xxxxxxxxx'
+            });
+        }
+
+        // Process uploaded files
+        const nicPath = req.files['nicFile'] ? req.files['nicFile'][0].path : null;
+        const medicalPath = req.files['medicalFile'] ? req.files['medicalFile'][0].path : null;
+        const certificatePath = req.files['certificateFile'] ? req.files['certificateFile'][0].path : null;
+        const imagePath = req.files['profileImage'] ? req.files['profileImage'][0].path : null;
+
+        // Parse specializations if provided
+        let parsedSpecializations = [];
+        try {
+            if (specializations) {
+                parsedSpecializations = typeof specializations === 'string'
+                    ? JSON.parse(specializations)
+                    : (Array.isArray(specializations) ? specializations : [specializations]);
+            } else {
+                parsedSpecializations = ['General Therapy']; // Default
+            }
+        } catch (e) {
+            parsedSpecializations = ['General Therapy'];
+        }
+
+        // Create working history entry
+        const workingHistory = [{
+            spa_id: parseInt(spa_id) || 1,
+            start_date: new Date().toISOString().split('T')[0],
+            end_date: null,
+            position: 'Therapist',
+            experience_gained: parseInt(experience_years) || 0,
+            status: 'pending'
+        }];
+
+        // Insert therapist with all new fields
+        const [result] = await db.execute(`
+            INSERT INTO therapists (
+                spa_id, name, first_name, last_name, date_of_birth, nic, nic_number,
+                email, phone, address, 
+                nic_attachment, medical_certificate, spa_center_certificate, therapist_image,
+                specializations, experience_years, status,
+                working_history, current_spa_id, total_experience_years, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, NOW())
+        `, [
+            parseInt(spa_id) || 1,
+            name || `${firstName} ${lastName}`,
+            firstName,
+            lastName,
+            birthday,
+            nic,
+            nic,  // Use same NIC for both fields
+            email || `${firstName.toLowerCase()}.${lastName.toLowerCase()}@spa.com`,
+            phone,
+            address || 'Spa Location',
+            nicPath,
+            medicalPath,
+            certificatePath,
+            imagePath,
+            JSON.stringify(parsedSpecializations),
+            parseInt(experience_years) || 0,
+            JSON.stringify(workingHistory),
+            parseInt(spa_id) || 1,
+            parseInt(experience_years) || 0
+        ]);
+
+        const therapistId = result.insertId;
+
+        // Get spa details for notifications
+        const [spa] = await db.execute('SELECT * FROM spas WHERE id = ?', [parseInt(spa_id) || 1]);
+        const spaName = spa[0]?.name || 'Unknown Spa';
+
+        // Log activity
+        await ActivityLogModel.logActivity({
+            entity_type: 'therapist',
+            entity_id: therapistId,
+            action: 'created',
+            description: `New therapist ${firstName} ${lastName} added to ${spaName} - pending LSA approval`,
+            actor_type: 'spa',
+            actor_id: parseInt(spa_id) || 1,
+            actor_name: spaName,
+            new_status: 'pending'
+        });
+
+        // Create notification for LSA
+        await NotificationModel.createNotification({
+            recipient_type: 'lsa',
+            recipient_id: 1, // LSA admin
+            title: 'New Therapist Application',
+            message: `${firstName} ${lastName} from ${spaName} requires approval for registration`,
+            type: 'warning',
+            related_entity_type: 'therapist',
+            related_entity_id: therapistId
+        });
+
+        // Create confirmation notification for spa
+        await NotificationModel.createNotification({
+            recipient_type: 'spa',
+            recipient_id: parseInt(spa_id) || 1,
+            title: 'Therapist Application Submitted',
+            message: `${firstName} ${lastName} application has been submitted to LSA for approval`,
+            type: 'info',
+            related_entity_type: 'therapist',
+            related_entity_id: therapistId
+        });
+
+        res.status(201).json({
+            success: true,
+            message: 'Therapist added successfully! Sent to AdminLSA for approval.',
+            therapist_id: therapistId,
+            data: {
+                id: therapistId,
+                name: `${firstName} ${lastName}`,
+                firstName,
+                lastName,
+                nic,
+                phone,
+                status: 'pending',
+                submitted_at: new Date().toISOString()
+            }
+        });
+    } catch (error) {
+        console.error('Error adding therapist:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error saving therapist data',
+            error: error.message
+        });
+    }
+});
+
+// Keep the existing route for backward compatibility
 router.post('/spas/:spaId/therapists', upload.fields([
     { name: 'certificate', maxCount: 1 },
     { name: 'profile_image', maxCount: 1 },
