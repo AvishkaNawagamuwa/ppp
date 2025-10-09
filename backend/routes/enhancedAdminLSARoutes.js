@@ -554,6 +554,75 @@ router.get('/dashboard/stats', async (req, res) => {
     }
 });
 
+// Blacklist spa
+router.patch('/spas/:id/blacklist', async (req, res) => {
+    try {
+        const spaId = req.params.id;
+        const { reason } = req.body;
+
+        if (!reason) {
+            return res.status(400).json({
+                success: false,
+                error: 'Blacklist reason is required'
+            });
+        }
+
+        // Get spa details first
+        const [spa] = await db.execute('SELECT * FROM spas WHERE id = ?', [spaId]);
+
+        if (spa.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Spa not found'
+            });
+        }
+
+        // Update spa with blacklist information
+        await db.execute(`
+            UPDATE spas 
+            SET blacklist_reason = ?, 
+                blacklisted_at = NOW()
+            WHERE id = ?
+        `, [reason, spaId]);
+
+        // Log activity
+        await ActivityLogModel.logActivity({
+            entity_type: 'spa',
+            entity_id: spaId,
+            action: 'blacklisted',
+            description: `Spa ${spa[0].name} blacklisted by LSA administration: ${reason}`,
+            actor_type: 'lsa',
+            actor_id: 1,
+            actor_name: 'LSA Admin',
+            old_status: spa[0].status,
+            new_status: 'blacklisted',
+            metadata: { reason }
+        });
+
+        // Create notification for spa
+        await NotificationModel.createNotification({
+            recipient_type: 'spa',
+            recipient_id: spaId,
+            title: 'Spa Blacklisted',
+            message: `Your spa ${spa[0].name} has been blacklisted. Reason: ${reason}`,
+            type: 'warning',
+            related_entity_type: 'spa',
+            related_entity_id: spaId
+        });
+
+        res.json({
+            success: true,
+            message: 'Spa blacklisted successfully'
+        });
+    } catch (error) {
+        console.error('Error blacklisting spa:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to blacklist spa'
+        });
+    }
+});
+
 // Get recent activities
 router.get('/activities', async (req, res) => {
     try {

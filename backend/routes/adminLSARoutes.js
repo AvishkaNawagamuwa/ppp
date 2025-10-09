@@ -50,6 +50,107 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
     }
 }));
 
+/**
+ * @route   GET /api/lsa/dashboard/spas-count
+ * @desc    Get count of verified spas
+ * @access  Private (Admin)
+ */
+router.get('/dashboard/spas-count', asyncHandler(async (req, res) => {
+    try {
+        const [rows] = await db.execute(
+            `SELECT COUNT(*) as verified_count FROM spas WHERE status = 'verified'`
+        );
+
+        res.json({
+            success: true,
+            data: {
+                verified_count: rows[0].verified_count
+            }
+        });
+
+    } catch (error) {
+        console.error('Get spas count error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch spas count',
+            error: error.message
+        });
+    }
+}));
+
+/**
+ * @route   GET /api/lsa/dashboard/therapists-count
+ * @desc    Get count of approved therapists
+ * @access  Private (Admin)
+ */
+router.get('/dashboard/therapists-count', asyncHandler(async (req, res) => {
+    try {
+        const [rows] = await db.execute(
+            `SELECT COUNT(*) as approved_count FROM therapists WHERE status = 'approved'`
+        );
+
+        res.json({
+            success: true,
+            data: {
+                approved_count: rows[0].approved_count
+            }
+        });
+
+    } catch (error) {
+        console.error('Get therapists count error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch therapists count',
+            error: error.message
+        });
+    }
+}));
+
+/**
+ * @route   GET /api/lsa/dashboard/recent-activity
+ * @desc    Get recent spa and therapist activity from today and yesterday
+ * @access  Private (Admin)
+ */
+router.get('/dashboard/recent-activity', asyncHandler(async (req, res) => {
+    try {
+        const [rows] = await db.execute(`
+            SELECT 
+                al.id,
+                al.entity_type,
+                al.entity_id,
+                al.action,
+                al.description,
+                al.old_status,
+                al.new_status,
+                al.created_at,
+                CASE 
+                    WHEN al.entity_type = 'therapist' THEN CONCAT(COALESCE(t.first_name, t.name), ' ', COALESCE(t.last_name, ''))
+                    WHEN al.entity_type = 'spa' THEN s.name
+                    ELSE 'System'
+                END as entity_name
+            FROM activity_logs al
+            LEFT JOIN therapists t ON al.entity_type = 'therapist' AND al.entity_id = t.id
+            LEFT JOIN spas s ON al.entity_type = 'spa' AND al.entity_id = s.id
+            WHERE al.created_at >= CURDATE() - INTERVAL 1 DAY
+            ORDER BY al.created_at DESC
+            LIMIT 20
+        `);
+
+        res.json({
+            success: true,
+            data: rows
+        });
+
+    } catch (error) {
+        console.error('Get recent activity error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch recent activity',
+            error: error.message
+        });
+    }
+}));
+
 // ==================== SPA MANAGEMENT ROUTES ====================
 
 /**

@@ -85,6 +85,8 @@ class TherapistModel {
 
     // Get all therapists for AdminLSA with optional status filter
     static async getAllTherapists(status = null) {
+        console.log('🚀 TherapistModel.getAllTherapists called with status:', status);
+
         let query = `
             SELECT t.*, s.name as spa_name, s.owner_fname, s.owner_lname 
             FROM therapists t 
@@ -98,7 +100,29 @@ class TherapistModel {
         }
 
         query += ' ORDER BY t.created_at DESC';
-        const [rows] = await db.execute(query, params);
+
+        console.log('🔍 Executing therapist query:', query);
+        console.log('📝 With params:', params);
+
+        let rows;
+        try {
+            const result = await db.execute(query, params);
+            rows = result[0]; // Get the first element which contains the rows
+            console.log('📊 Query returned:', rows.length, 'rows');
+        } catch (dbError) {
+            console.error('❌ Database error in getAllTherapists:', dbError);
+            throw dbError;
+        }
+
+        if (rows.length > 0) {
+            console.log('🎯 First row sample:', {
+                id: rows[0].id,
+                name: rows[0].name,
+                status: rows[0].status,
+                spa_name: rows[0].spa_name
+            });
+        }
+
         return rows;
     }
 
@@ -126,7 +150,7 @@ class TherapistModel {
             // Update therapist status
             const updateTherapistQuery = `
                 UPDATE therapists 
-                SET status = 'approved', approved_date = NOW(), approved_by = ?
+                SET status = 'approved', reviewed_at = NOW(), reviewed_by = ?
                 WHERE id = ?
             `;
             await connection.execute(updateTherapistQuery, [reviewedBy, therapistId]);
@@ -145,12 +169,12 @@ class TherapistModel {
 
             // Log activity
             await this.logActivity(connection, 'therapist', therapistId, 'approved',
-                `Therapist approved: ${therapist.fname} ${therapist.lname}`, 'lsa', null, reviewedBy);
+                `Therapist approved: ${therapist.name}`, 'lsa', null, reviewedBy);
 
             // Create notification for spa
             await this.createNotification(connection, 'spa', therapist.spa_id,
                 'Therapist Approved',
-                `Your therapist ${therapist.fname} ${therapist.lname} has been approved!`,
+                `Your therapist ${therapist.name} has been approved!`,
                 'success', 'therapist', therapistId
             );
 
@@ -172,7 +196,7 @@ class TherapistModel {
             // Update therapist status
             const updateTherapistQuery = `
                 UPDATE therapists 
-                SET status = 'rejected', reject_reason = ?, approved_date = NOW(), approved_by = ?
+                SET status = 'rejected', rejection_reason = ?, reviewed_at = NOW(), reviewed_by = ?
                 WHERE id = ?
             `;
             await connection.execute(updateTherapistQuery, [reason, reviewedBy, therapistId]);
@@ -191,12 +215,12 @@ class TherapistModel {
 
             // Log activity
             await this.logActivity(connection, 'therapist', therapistId, 'rejected',
-                `Therapist rejected: ${therapist.fname} ${therapist.lname}. Reason: ${reason}`, 'lsa', null, reviewedBy);
+                `Therapist rejected: ${therapist.name}. Reason: ${reason}`, 'lsa', null, reviewedBy);
 
             // Create notification for spa
             await this.createNotification(connection, 'spa', therapist.spa_id,
                 'Therapist Rejected',
-                `Your therapist ${therapist.fname} ${therapist.lname} was rejected. Reason: ${reason}`,
+                `Your therapist ${therapist.name} was rejected. Reason: ${reason}`,
                 'error', 'therapist', therapistId
             );
 
@@ -231,7 +255,7 @@ class TherapistModel {
 
             // Log activity
             await this.logActivity(connection, 'therapist', therapistId, 'resigned',
-                `Therapist resigned: ${therapist.fname} ${therapist.lname}`, 'spa', spaId, `${therapist.fname} ${therapist.lname}`);
+                `Therapist resigned: ${therapist.name}`, 'spa', spaId, therapist.name);
 
             await connection.commit();
         } catch (error) {
@@ -264,8 +288,8 @@ class TherapistModel {
 
             // Log activity
             await this.logActivity(connection, 'therapist', therapistId, 'terminated',
-                `Therapist terminated: ${therapist.fname} ${therapist.lname}${reason ? '. Reason: ' + reason : ''}`,
-                'spa', spaId, `${therapist.fname} ${therapist.lname}`);
+                `Therapist terminated: ${therapist.name}${reason ? '. Reason: ' + reason : ''}`,
+                'spa', spaId, therapist.name);
 
             await connection.commit();
         } catch (error) {

@@ -43,6 +43,7 @@ import assets from '../../assets/images/images';
 // Import existing and new components
 import Dashboard from './Dashboard';
 import ManageSpas from './ManageSpas';
+import ManageTherapists from './ManageTherapists';
 
 const AdminLSA = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -167,6 +168,18 @@ const AdminLSA = () => {
   const [notificationHistory, setNotificationHistory] = useState([]);
   const [selectedNotification, setSelectedNotification] = useState(null);
 
+  // Enhanced notification history system
+  const [notificationFilters, setNotificationFilters] = useState({
+    type: 'all',
+    status: 'all',
+    limit: '100'
+  });
+  const [notificationSummary, setNotificationSummary] = useState({
+    therapists: { total: 0, pending: 0, approved: 0, rejected: 0, resigned: 0, terminated: 0 },
+    spas: { total: 0, pending: 0, verified: 0, rejected: 0, blacklisted: 0 },
+    activity: { therapist_actions_today: 0, spa_actions_today: 0, therapist_actions_week: 0, spa_actions_week: 0 }
+  });
+
   // API base URL
   const API_BASE = 'http://localhost:5000/api';
 
@@ -225,19 +238,62 @@ const AdminLSA = () => {
     }
   };
 
-  // Load notification history for a specific therapist
-  const loadNotificationHistory = async (therapistId) => {
+  // Load enhanced notification history from database
+  const loadNotificationHistory = async () => {
     try {
-      const response = await axios.get(`${API_BASE}/lsa/notifications/therapist/${therapistId}`);
+      setLoading(true);
+      
+      // Build query parameters based on filters
+      const params = new URLSearchParams({
+        limit: notificationFilters.limit,
+        offset: '0',
+        type: notificationFilters.type,
+        status: notificationFilters.status
+      });
+
+      console.log('📊 Loading notification history with filters:', notificationFilters);
+
+      const response = await axios.get(`${API_BASE}/lsa/notifications/history?${params.toString()}`);
+      
       if (response.data.success) {
         setNotificationHistory(response.data.data);
+        console.log(`✅ Loaded ${response.data.data.length} notification history records`);
+        
+        // Also load summary
+        await loadNotificationSummary();
       } else {
+        console.error('❌ Failed to load notification history:', response.data.message);
         setNotificationHistory([]);
       }
     } catch (error) {
-      console.error('Error loading notification history:', error);
-      // Set empty array instead of mock data - show real database state
+      console.error('❌ Error loading notification history:', error);
       setNotificationHistory([]);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Failed to load notification history. Please try again.',
+        toast: true,
+        position: 'top-end',
+        timer: 5000
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load notification summary statistics
+  const loadNotificationSummary = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/lsa/notifications/summary`);
+      
+      if (response.data.success) {
+        setNotificationSummary(response.data.data);
+        console.log('📊 Loaded notification summary statistics');
+      } else {
+        console.error('❌ Failed to load notification summary:', response.data.message);
+      }
+    } catch (error) {
+      console.error('❌ Error loading notification summary:', error);
     }
   };
 
@@ -649,8 +705,10 @@ const AdminLSA = () => {
       loadTherapists();
     } else if (activeTab === 'third-party') {
       loadGovernmentOfficers();
+    } else if (activeTab === 'notifications') {
+      loadNotificationHistory();
     }
-  }, [activeTab, spaFilters, therapistTab, searchQuery]);
+  }, [activeTab, spaFilters, therapistTab, searchQuery, notificationFilters]);
 
   // Real-time notification polling
   useEffect(() => {
@@ -709,7 +767,7 @@ const AdminLSA = () => {
       case 'spas':
         return <ManageSpas />;
       case 'therapists':
-        return renderTherapistManagement();
+        return <ManageTherapists />;
       case 'financial':
         return renderFinancialOverview();
       case 'third-party':
@@ -1150,39 +1208,11 @@ const AdminLSA = () => {
       <div className="mb-6 flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Notification History</h1>
-          <p className="text-gray-600 mt-2">View and manage all system notifications</p>
+          <p className="text-gray-600 mt-2">View all therapist and spa actions dynamically from database</p>
         </div>
         <div className="flex space-x-3">
           <button
-            onClick={async () => {
-              try {
-                // Mark all unread notifications as read
-                const unreadNotifications = notifications.filter(n => n.is_read === 0);
-
-                for (const notification of unreadNotifications) {
-                  await axios.put(`${API_BASE}/lsa/notifications/${notification.id}/read`);
-                }
-
-                // Refresh notifications
-                await loadNotifications();
-                setUnreadNotifications(0);
-
-                Swal.fire('Success', `Marked ${unreadNotifications.length} notifications as read`, 'success');
-              } catch (error) {
-                console.error('Error marking notifications as read:', error);
-                Swal.fire('Error', 'Failed to mark notifications as read', 'error');
-              }
-            }}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center"
-          >
-            <CheckIcon className="w-4 h-4 mr-2" />
-            Mark All Read
-          </button>
-          <button
-            onClick={async () => {
-              await loadNotifications();
-              Swal.fire('Success', 'Notifications refreshed', 'success');
-            }}
+            onClick={loadNotificationHistory}
             className="bg-[#0A1428] text-white px-4 py-2 rounded-lg hover:bg-[#0A1428]/90 flex items-center"
           >
             <ArrowPathIcon className="w-4 h-4 mr-2" />
@@ -1191,14 +1221,14 @@ const AdminLSA = () => {
         </div>
       </div>
 
-      {/* Notification Stats */}
+      {/* Dynamic Stats from Database */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="bg-white p-6 rounded-lg shadow-md">
           <div className="flex items-center">
             <BellIcon className="w-8 h-8 text-blue-600" />
             <div className="ml-4">
-              <p className="text-2xl font-semibold text-gray-900">{notifications.length}</p>
-              <p className="text-gray-600">Total Notifications</p>
+              <p className="text-2xl font-semibold text-gray-900">{notificationHistory.length}</p>
+              <p className="text-gray-600">Total Actions</p>
             </div>
           </div>
         </div>
@@ -1207,20 +1237,20 @@ const AdminLSA = () => {
             <CheckIcon className="w-8 h-8 text-green-600" />
             <div className="ml-4">
               <p className="text-2xl font-semibold text-gray-900">
-                {notifications.filter(n => n.is_read === 1).length}
+                {notificationHistory.filter(n => n.status === 'approved' || n.status === 'verified').length}
               </p>
-              <p className="text-gray-600">Read</p>
+              <p className="text-gray-600">Approved</p>
             </div>
           </div>
         </div>
         <div className="bg-white p-6 rounded-lg shadow-md">
           <div className="flex items-center">
-            <ClockIcon className="w-8 h-8 text-yellow-600" />
+            <XMarkIcon className="w-8 h-8 text-red-600" />
             <div className="ml-4">
               <p className="text-2xl font-semibold text-gray-900">
-                {notifications.filter(n => n.is_read === 0).length}
+                {notificationHistory.filter(n => n.status === 'rejected').length}
               </p>
-              <p className="text-gray-600">Unread</p>
+              <p className="text-gray-600">Rejected</p>
             </div>
           </div>
         </div>
@@ -1229,138 +1259,219 @@ const AdminLSA = () => {
             <UserGroupIcon className="w-8 h-8 text-purple-600" />
             <div className="ml-4">
               <p className="text-2xl font-semibold text-gray-900">
-                {notifications.filter(n => n.notification_type === 'therapist_registration').length}
+                {notificationHistory.filter(n => n.entity_type === 'therapist').length}
               </p>
-              <p className="text-gray-600">Therapist Related</p>
+              <p className="text-gray-600">Therapist Actions</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Dynamic Filters */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Filter Notifications</h3>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Entity Type</label>
+            <select 
+              value={notificationFilters.type}
+              onChange={(e) => setNotificationFilters({...notificationFilters, type: e.target.value})}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500"
+            >
+              <option value="all">All Types</option>
+              <option value="therapist">Therapists</option>
+              <option value="spa">Spas</option>
+            </select>
+          </div>
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-            <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500">
-              <option value="">All Statuses</option>
-              <option value="read">Read</option>
-              <option value="unread">Unread</option>
+            <select 
+              value={notificationFilters.status}
+              onChange={(e) => setNotificationFilters({...notificationFilters, status: e.target.value})}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500"
+            >
+              <option value="all">All Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="verified">Verified</option>
+              <option value="rejected">Rejected</option>
+              <option value="resigned">Resigned</option>
+              <option value="terminated">Terminated</option>
+              <option value="blacklisted">Blacklisted</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
-            <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500">
-              <option value="">All Types</option>
-              <option value="therapist_registration">Therapist Registration</option>
-              <option value="spa_registration">Spa Registration</option>
-              <option value="status_update">Status Update</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Date Range</label>
-            <select className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500">
-              <option value="">All Time</option>
-              <option value="today">Today</option>
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Limit</label>
+            <select 
+              value={notificationFilters.limit}
+              onChange={(e) => setNotificationFilters({...notificationFilters, limit: e.target.value})}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500"
+            >
+              <option value="50">50 Records</option>
+              <option value="100">100 Records</option>
+              <option value="200">200 Records</option>
+              <option value="500">500 Records</option>
             </select>
           </div>
           <div className="flex items-end">
-            <button className="w-full bg-[#0A1428] text-white px-4 py-2 rounded-lg hover:bg-[#0A1428]/90">
+            <button 
+              onClick={loadNotificationHistory}
+              className="w-full bg-[#0A1428] text-white px-4 py-2 rounded-lg hover:bg-[#0A1428]/90"
+            >
               Apply Filters
             </button>
           </div>
         </div>
       </div>
 
-      {/* Notifications List */}
+      {/* Dynamic Notifications List from Database */}
       <div className="bg-white rounded-lg shadow-md">
         <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Recent Notifications</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Action History</h3>
+          <p className="text-sm text-gray-600 mt-1">Real-time data from therapists and spas tables</p>
         </div>
 
         <div className="divide-y divide-gray-200">
-          {notifications.length === 0 ? (
+          {loading ? (
+            <div className="p-8 text-center">
+              <ArrowPathIcon className="w-8 h-8 text-gray-400 mx-auto mb-4 animate-spin" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Loading History...</h3>
+              <p className="text-gray-600">Fetching latest data from database...</p>
+            </div>
+          ) : notificationHistory.length === 0 ? (
             <div className="p-8 text-center">
               <BellIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No Notifications</h3>
-              <p className="text-gray-600">No notifications found. New notifications will appear here.</p>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No Action History</h3>
+              <p className="text-gray-600">No actions found with current filters.</p>
             </div>
           ) : (
-            notifications.map((notification) => (
+            notificationHistory.map((notification, index) => (
               <div
-                key={notification.notification_id}
-                className={`p-6 hover:bg-gray-50 cursor-pointer transition-colors ${notification.is_read === 0 ? 'bg-blue-50 border-l-4 border-blue-500' : ''
-                  }`}
-                onClick={async () => {
-                  setSelectedNotification(notification);
-
-                  // Mark as read if unread
-                  if (notification.is_read === 0) {
-                    try {
-                      await axios.put(`${API_BASE}/lsa/notifications/${notification.id}/read`);
-                      // Refresh notifications to update the UI
-                      await loadNotifications();
-                      setUnreadNotifications(prev => Math.max(0, prev - 1));
-                    } catch (error) {
-                      console.error('Error marking notification as read:', error);
-                    }
-                  }
-
-                  if (notification.related_entity_id && notification.related_entity_type === 'therapist') {
-                    handleViewTherapistDetails(notification.related_entity_id);
-                  }
-                }}
+                key={`${notification.entity_type}-${notification.therapist_id || notification.spa_id}-${index}`}
+                className="p-6 hover:bg-gray-50 transition-colors"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start space-x-4">
-                    <div className={`w-2 h-2 rounded-full mt-3 flex-shrink-0 ${notification.notification_type === 'therapist_registration' ? 'bg-blue-500' :
-                      notification.notification_type === 'spa_registration' ? 'bg-green-500' :
-                        notification.notification_type === 'status_update' ? 'bg-yellow-500' :
-                          'bg-gray-500'
-                      }`}></div>
+                    <div className={`w-3 h-3 rounded-full mt-3 flex-shrink-0 ${
+                      notification.entity_type === 'therapist' ? 
+                        (notification.status === 'approved' ? 'bg-green-500' :
+                         notification.status === 'rejected' ? 'bg-red-500' :
+                         notification.status === 'pending' ? 'bg-yellow-500' :
+                         notification.status === 'resigned' ? 'bg-orange-500' :
+                         notification.status === 'terminated' ? 'bg-red-700' :
+                         'bg-blue-500') :
+                        (notification.status === 'verified' ? 'bg-green-500' :
+                         notification.status === 'rejected' ? 'bg-red-500' :
+                         notification.status === 'pending' ? 'bg-yellow-500' :
+                         notification.status === 'blacklisted' ? 'bg-red-800' :
+                         'bg-blue-500')
+                    }`}></div>
                     <div className="flex-1">
                       <div className="flex items-center space-x-2">
                         <h4 className="text-lg font-medium text-gray-900">
-                          {notification.title}
+                          {notification.action_title}
                         </h4>
-                        {notification.is_read === 0 && (
-                          <span className="bg-blue-500 text-white text-xs px-2 py-1 rounded-full">New</span>
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                          notification.entity_type === 'therapist' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                        }`}>
+                          {notification.entity_type.toUpperCase()}
+                        </span>
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                          notification.status === 'approved' || notification.status === 'verified' ? 'bg-green-100 text-green-800' :
+                          notification.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                          notification.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          notification.status === 'resigned' ? 'bg-orange-100 text-orange-800' :
+                          notification.status === 'terminated' ? 'bg-red-200 text-red-900' :
+                          notification.status === 'blacklisted' ? 'bg-red-200 text-red-900' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {notification.status.toUpperCase()}
+                        </span>
+                      </div>
+                      <p className="text-gray-600 mt-1">{notification.action_message}</p>
+                      
+                      {/* Entity Details */}
+                      <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                          <div>
+                            <strong className="text-gray-700">Name:</strong>
+                            <span className="ml-2 text-gray-900">{notification.first_name} {notification.last_name}</span>
+                          </div>
+                          <div>
+                            <strong className="text-gray-700">
+                              {notification.entity_type === 'therapist' ? 'Phone:' : 'Email:'}
+                            </strong>
+                            <span className="ml-2 text-gray-900">
+                              {notification.entity_type === 'therapist' ? notification.phone : notification.email}
+                            </span>
+                          </div>
+                          {notification.entity_type === 'therapist' && (
+                            <div>
+                              <strong className="text-gray-700">Spa:</strong>
+                              <span className="ml-2 text-gray-900">{notification.spa_name}</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Additional Details */}
+                        {notification.rejection_reason && (
+                          <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
+                            <strong className="text-red-700">Rejection Reason:</strong>
+                            <span className="ml-2 text-red-900">{notification.rejection_reason}</span>
+                          </div>
+                        )}
+                        
+                        {notification.termination_reason && (
+                          <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
+                            <strong className="text-red-700">Termination Reason:</strong>
+                            <span className="ml-2 text-red-900">{notification.termination_reason}</span>
+                          </div>
+                        )}
+                        
+                        {notification.reviewed_by && (
+                          <div className="mt-2 text-sm">
+                            <strong className="text-gray-700">Reviewed by:</strong>
+                            <span className="ml-2 text-gray-900">{notification.reviewed_by}</span>
+                          </div>
                         )}
                       </div>
-                      <p className="text-gray-600 mt-1">{notification.message}</p>
+                      
                       <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
                         <span className="flex items-center">
                           <ClockIcon className="w-4 h-4 mr-1" />
-                          {new Date(notification.created_at).toLocaleString()}
+                          Action Date: {new Date(notification.action_date).toLocaleString()}
                         </span>
-                        <span className="flex items-center">
-                          <span className={`w-2 h-2 rounded-full mr-2 ${notification.notification_type === 'therapist_registration' ? 'bg-blue-500' :
-                            notification.notification_type === 'spa_registration' ? 'bg-green-500' :
-                              'bg-yellow-500'
-                            }`}></span>
-                          {notification.notification_type?.replace('_', ' ').toUpperCase()}
+                        <span>
+                          Created: {new Date(notification.created_at).toLocaleString()}
                         </span>
-                        {notification.recipient_id && (
-                          <span>Recipient ID: #{notification.recipient_id}</span>
-                        )}
+                        <span>
+                          ID: #{notification.entity_type === 'therapist' ? notification.therapist_id : notification.spa_id}
+                        </span>
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
-                    {notification.data?.therapist_id && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleViewTherapistDetails(notification.data.therapist_id);
-                        }}
-                        className="text-yellow-600 hover:text-yellow-800 text-sm font-medium"
-                      >
-                        View Details
-                      </button>
-                    )}
+                    <button
+                      onClick={() => {
+                        // View specific entity details
+                        if (notification.entity_type === 'therapist') {
+                          handleViewTherapistDetails(notification.therapist_id);
+                        } else {
+                          // Handle spa details view
+                          setSelectedSpa({
+                            spa_id: notification.spa_id,
+                            spa_name: notification.spa_name,
+                            owner_name: `${notification.first_name} ${notification.last_name}`,
+                            email: notification.email,
+                            status: notification.status
+                          });
+                          setShowSpaModal(true);
+                        }
+                      }}
+                      className="text-yellow-600 hover:text-yellow-800 text-sm font-medium"
+                    >
+                      View Details
+                    </button>
                     <ChevronRightIcon className="w-5 h-5 text-gray-400" />
                   </div>
                 </div>
@@ -1369,11 +1480,22 @@ const AdminLSA = () => {
           )}
         </div>
 
-        {notifications.length > 0 && (
-          <div className="p-6 border-t border-gray-200 text-center">
-            <button className="text-yellow-600 hover:text-yellow-800 font-medium">
-              Load More Notifications
-            </button>
+        {notificationHistory.length > 0 && (
+          <div className="p-6 border-t border-gray-200 bg-gray-50">
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-gray-600">
+                Showing {notificationHistory.length} records
+              </p>
+              <button 
+                onClick={() => {
+                  setNotificationFilters({...notificationFilters, limit: String(parseInt(notificationFilters.limit) + 100)});
+                  loadNotificationHistory();
+                }}
+                className="text-yellow-600 hover:text-yellow-800 font-medium text-sm"
+              >
+                Load More Records
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -1475,8 +1597,8 @@ const AdminLSA = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${officer.status === 'active' ? 'bg-green-100 text-green-800' :
-                          officer.status === 'never_logged_in' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
+                        officer.status === 'never_logged_in' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
                         }`}>
                         {officer.status === 'never_logged_in' ? 'Never Logged In' :
                           officer.status.charAt(0).toUpperCase() + officer.status.slice(1)}

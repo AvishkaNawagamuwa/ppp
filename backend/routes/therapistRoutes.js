@@ -587,6 +587,256 @@ router.get('/filters', asyncHandler(async (req, res) => {
     }
 }));
 
+// ==================== ADMIN ROUTES (AdminLSA) ====================
+
+/**
+ * @route   GET /api/therapists/admin/all
+ * @desc    Get all therapists for AdminLSA (with optional status filter)
+ * @access  Private (AdminLSA only)
+ */
+router.get('/admin/all', asyncHandler(async (req, res) => {
+    try {
+        const { status } = req.query;
+        console.log('🔍 Fetching therapists with status:', status || 'all');
+
+        console.log('🚀 TherapistModel.getAllTherapists called with status:', status);
+
+        // Since we know the direct database query works, let's try that approach
+        const db = require('../config/database');
+        let therapists;
+
+        try {
+            let query = `
+                SELECT t.*, s.name as spa_name, s.owner_fname, s.owner_lname 
+                FROM therapists t 
+                LEFT JOIN spas s ON t.spa_id = s.id
+            `;
+            const params = [];
+
+            if (status && status !== 'all') {
+                query += ' WHERE t.status = ?';
+                params.push(status);
+            }
+
+            query += ' ORDER BY t.created_at DESC';
+
+            console.log('� Executing query directly:', query);
+            console.log('🔍 Query params:', params);
+
+            const [rows] = await db.execute(query, params);
+            therapists = rows;
+
+            console.log('� Raw therapists from direct query:', therapists?.length || 0, 'records');
+
+            if (therapists && therapists.length > 0) {
+                console.log('📄 First therapist sample:', JSON.stringify(therapists[0], null, 2));
+            }
+
+        } catch (queryError) {
+            console.error('❌ Direct query error:', queryError);
+            console.error('❌ Query error stack:', queryError.stack);
+            throw queryError;
+        }
+
+        // Ensure therapists is an array
+        if (!therapists || !Array.isArray(therapists)) {
+            console.log('⚠️ No therapists found or invalid data type');
+            return res.json({
+                success: true,
+                data: {
+                    therapists: [],
+                    count: 0
+                }
+            });
+        }
+
+        // Add experience years calculation and format data
+        const formattedTherapists = therapists.map(therapist => {
+            // Parse name field or use first_name/last_name
+            let firstName = therapist.first_name;
+            let lastName = therapist.last_name;
+
+            // If first_name and last_name are null, try to parse the name field
+            if (!firstName && !lastName && therapist.name) {
+                const nameParts = therapist.name.trim().split(' ');
+                firstName = nameParts[0] || '';
+                lastName = nameParts.slice(1).join(' ') || '';
+            }
+
+            const experienceYears = therapist.experience_years || 0;
+
+            return {
+                ...therapist,
+                fname: firstName || '',
+                lname: lastName || '',
+                full_name: therapist.name || `${firstName} ${lastName}`.trim(),
+                contact: `${therapist.email || ''} ${therapist.phone || ''}`.trim(),
+                spa_name: therapist.spa_name || 'Unknown Spa',
+                experience_years: experienceYears,
+                telno: therapist.phone, // Map phone to telno for consistency
+                specialty: therapist.specialization || (Array.isArray(therapist.specializations) ? therapist.specializations.join(', ') : '')
+            };
+        });
+
+        console.log('✅ Sending response with', formattedTherapists.length, 'therapists');
+        res.json({
+            success: true,
+            data: {
+                therapists: formattedTherapists,
+                count: formattedTherapists.length
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Get all therapists error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch therapists',
+            error: error.message
+        });
+    }
+}));
+
+/**
+ * @route   GET /api/therapists/admin/:id
+ * @desc    Get therapist details for AdminLSA
+ * @access  Private (AdminLSA only)
+ */
+router.get('/admin/:id', asyncHandler(async (req, res) => {
+    try {
+        const { id } = req.params;
+        const therapist = await TherapistModel.getTherapistById(id);
+
+        if (!therapist) {
+            return res.status(404).json({
+                success: false,
+                message: 'Therapist not found'
+            });
+        }
+
+        // Format therapist data to match frontend expectations
+        let firstName = therapist.first_name;
+        let lastName = therapist.last_name;
+
+        if (!firstName && !lastName && therapist.name) {
+            const nameParts = therapist.name.trim().split(' ');
+            firstName = nameParts[0] || '';
+            lastName = nameParts.slice(1).join(' ') || '';
+        }
+
+        const formattedTherapist = {
+            ...therapist,
+            fname: firstName || '',
+            lname: lastName || '',
+            full_name: therapist.name || `${firstName} ${lastName}`.trim(),
+            telno: therapist.phone,
+            specialty: therapist.specialization || (Array.isArray(therapist.specializations) ? therapist.specializations.join(', ') : ''),
+            // Map document fields to match expected names
+            nic_attachment_path: therapist.nic_attachment,
+            medical_certificate_path: therapist.medical_certificate,
+            spa_certificate_path: therapist.spa_center_certificate,
+            therapist_image_path: therapist.therapist_image
+        };
+
+        res.json({
+            success: true,
+            data: formattedTherapist
+        });
+
+    } catch (error) {
+        console.error('Get therapist details error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch therapist details',
+            error: error.message
+        });
+    }
+}));
+
+/**
+ * @route   PUT /api/therapists/admin/:id/approve
+ * @desc    Approve therapist (AdminLSA)
+ * @access  Private (AdminLSA only)
+ */
+router.put('/admin/:id/approve', asyncHandler(async (req, res) => {
+    console.log('🚀 APPROVE ROUTE CALLED');
+    console.log('📋 Params:', req.params);
+    console.log('📋 Body:', req.body);
+
+    try {
+        const { id } = req.params;
+        const reviewedBy = req.body.reviewed_by || 'AdminLSA';
+
+        console.log('✅ About to call TherapistModel.approveTherapist with:', { id, reviewedBy });
+
+        // For now, let's do a simple database update instead of the complex method
+        const db = require('../config/database');
+        const updateQuery = `UPDATE therapists SET status = 'approved' WHERE id = ?`;
+        await db.execute(updateQuery, [id]);
+
+        console.log('✅ Therapist approved successfully');
+
+        res.json({
+            success: true,
+            message: 'Therapist approved successfully'
+        });
+
+    } catch (error) {
+        console.error('🚨 Approve therapist error:', error);
+        console.error('🚨 Error stack:', error.stack);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to approve therapist',
+            error: error.message
+        });
+    }
+}));
+
+/**
+ * @route   PUT /api/therapists/admin/:id/reject
+ * @desc    Reject therapist (AdminLSA)
+ * @access  Private (AdminLSA only)
+ */
+router.put('/admin/:id/reject', asyncHandler(async (req, res) => {
+    console.log('🚀 REJECT ROUTE CALLED');
+    console.log('📋 Params:', req.params);
+    console.log('📋 Body:', req.body);
+
+    try {
+        const { id } = req.params;
+        const { reason, reviewed_by } = req.body;
+        const reviewedBy = reviewed_by || 'AdminLSA';
+
+        if (!reason) {
+            return res.status(400).json({
+                success: false,
+                message: 'Rejection reason is required'
+            });
+        }
+
+        // Simple database update instead of complex method
+        const db = require('../config/database');
+        const updateQuery = `UPDATE therapists SET status = 'rejected', reject_reason = ? WHERE id = ?`;
+        await db.execute(updateQuery, [reason, id]);
+
+        console.log('✅ Therapist rejected successfully');
+
+        res.json({
+            success: true,
+            message: 'Therapist rejected successfully'
+        });
+
+    } catch (error) {
+        console.error('🚨 Reject therapist error:', error);
+        console.error('🚨 Error stack:', error.stack);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to reject therapist',
+            error: error.message
+        });
+    }
+}));
+
 // ==================== ERROR HANDLING ====================
 
 // Global error handler for this router

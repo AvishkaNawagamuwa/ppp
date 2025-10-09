@@ -180,8 +180,8 @@ const PrerequisitesStep = ({
             <div
               key={index}
               className={`flex items-start p-4 rounded-lg bg-white border transition-colors duration-300 ${item.highlight
-                  ? 'border-gold-light bg-gold-light bg-opacity-5 hover:border-gold'
-                  : 'border-gray-200 hover:border-gold'
+                ? 'border-gold-light bg-gold-light bg-opacity-5 hover:border-gold'
+                : 'border-gray-200 hover:border-gold'
                 }`}
             >
               <div className="flex items-center h-5">
@@ -666,11 +666,150 @@ const UserDetailsStep = ({
 };
 
 // PaymentStep Component - Enhanced with Card and Bank Transfer Options
-const PaymentStep = ({ onBack, onPaymentSuccess }) => {
-  const [paymentMethod, setPaymentMethod] = useState('card');
+const PaymentStep = ({ onBack, onPaymentSuccess, userDetails }) => {
+  const [paymentMethod, setPaymentMethod] = useState('bank_transfer');
   const [saveCard, setSaveCard] = useState(false);
   const [cardNumber, setCardNumber] = useState('');
   const [cardType, setCardType] = useState('');
+  const [bankSlip, setBankSlip] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Test data function for development
+  const fillTestData = () => {
+    const testUserDetails = {
+      firstName: "John",
+      lastName: "Doe",
+      email: "john.doe@test.com",
+      telephone: "0112345678",
+      cellphone: "0771234567",
+      nicNo: "123456789V",
+      spaName: "Test Spa Resort",
+      spaAddressLine1: "123 Test Street",
+      spaAddressLine2: "Test Area",
+      spaProvince: "Western",
+      spaPostalCode: "10100",
+      spaTelephone: "0112345678",
+      spaBRNumber: "PV12345",
+      // Note: Files need to be added manually
+      nicFront: null,
+      nicBack: null,
+      brAttachment: null,
+      form1Certificate: null,
+      spaPhotosBanner: null,
+      facilityPhotos: [],
+      professionalCertifications: [],
+      otherDocument: null,
+    };
+
+    // Update parent component's userDetails
+    if (userDetails && typeof userDetails === 'object') {
+      Object.keys(testUserDetails).forEach(key => {
+        if (userDetails.hasOwnProperty(key)) {
+          userDetails[key] = testUserDetails[key];
+        }
+      });
+    }
+
+    console.log('Test data filled:', testUserDetails);
+  };
+
+  const handlePaymentSubmit = async () => {
+    // Basic validation
+    if (paymentMethod === 'bank_transfer' && !bankSlip) {
+      Swal.fire({
+        title: 'Bank Slip Required',
+        text: 'Please upload your bank transfer slip to continue.',
+        icon: 'warning',
+        confirmButtonColor: '#0A1428'
+      });
+      return;
+    }
+
+    // Check if basic user details are filled
+    if (!userDetails.firstName || !userDetails.lastName || !userDetails.email) {
+      Swal.fire({
+        title: 'Incomplete Information',
+        text: 'Please go back and complete all previous registration steps first.',
+        icon: 'warning',
+        confirmButtonColor: '#0A1428'
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      const formData = new FormData();
+
+      console.log('User details being sent:', userDetails);
+      console.log('Payment method:', paymentMethod);
+      console.log('Bank slip:', bankSlip);
+
+      // Add user details
+      Object.keys(userDetails).forEach(key => {
+        if (userDetails[key] !== null && userDetails[key] !== undefined) {
+          if (userDetails[key] instanceof File) {
+            formData.append(key, userDetails[key]);
+            console.log(`Added file ${key}:`, userDetails[key].name);
+          } else if (Array.isArray(userDetails[key])) {
+            // Handle arrays (like facilityPhotos)
+            userDetails[key].forEach((item, index) => {
+              if (item instanceof File) {
+                formData.append(`${key}`, item);
+                console.log(`Added array file ${key}[${index}]:`, item.name);
+              }
+            });
+          } else {
+            formData.append(key, userDetails[key]);
+            console.log(`Added field ${key}:`, userDetails[key]);
+          }
+        }
+      });
+
+      // Add payment details
+      formData.append('paymentMethod', paymentMethod);
+      console.log('Added paymentMethod:', paymentMethod);
+
+      if (paymentMethod === 'bank_transfer' && bankSlip) {
+        formData.append('bankSlip', bankSlip);
+        console.log('Added bank slip:', bankSlip.name);
+      }
+
+      const response = await fetch('/api/enhanced-registration/submit', {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        Swal.fire({
+          title: 'Registration Submitted!',
+          text: paymentMethod === 'bank_transfer'
+            ? 'Your registration has been submitted with bank transfer slip. We will verify your payment and activate your account within 24-48 hours.'
+            : 'Your registration has been completed successfully!',
+          icon: 'success',
+          confirmButtonColor: '#0A1428',
+          confirmButtonText: 'Continue'
+        }).then(() => {
+          // Redirect to success page
+          window.location.href = '/registration-success';
+        });
+      } else {
+        throw new Error(result.message || 'Registration failed');
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      Swal.fire({
+        title: 'Registration Failed',
+        text: error.message || 'Please check your details and try again.',
+        icon: 'error',
+        confirmButtonColor: '#0A1428'
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const detectCardType = (number) => {
     const cleaned = number.replace(/\s/g, '');
@@ -726,321 +865,403 @@ const PaymentStep = ({ onBack, onPaymentSuccess }) => {
   };
 
   return (
-    <div className="py-0">
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-primary-dark mb-3">Payment Details</h2>
-        <p className="text-gray-600 max-w-2xl mx-auto">
-          Choose your preferred payment method to complete the registration process.
-        </p>
-      </div>
+    <form onSubmit={(e) => { e.preventDefault(); handlePaymentSubmit(); }}>
+      <div className="py-0">
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-bold text-primary-dark mb-3">Payment Details</h2>
+          <p className="text-gray-600 max-w-2xl mx-auto">
+            Choose your preferred payment method to complete the registration process.
+          </p>
 
-      {/* Payment Method Selection */}
-      <div className="mb-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
-          <div
-            className={`border-2 rounded-xl p-4 cursor-pointer transition-all duration-300 ${paymentMethod === 'card'
+          {/* Development test button */}
+          {process.env.NODE_ENV === 'development' && (
+            <button
+              type="button"
+              onClick={fillTestData}
+              className="mt-2 bg-red-500 text-white px-4 py-2 rounded text-sm"
+            >
+              Fill Test Data (Dev Only)
+            </button>
+          )}
+        </div>      {/* Payment Method Selection */}
+        <div className="mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
+            <div
+              className={`border-2 rounded-xl p-4 cursor-pointer transition-all duration-300 ${paymentMethod === 'card'
                 ? 'border-gold bg-gold bg-opacity-10'
                 : 'border-gray-200 hover:border-gold-light'
-              }`}
-            onClick={() => setPaymentMethod('card')}
-          >
-            <div className="flex items-center">
-              <input
-                type="radio"
-                id="card-payment"
-                name="payment-method"
-                value="card"
-                checked={paymentMethod === 'card'}
-                onChange={() => setPaymentMethod('card')}
-                className="w-5 h-5 text-gold focus:ring-gold border-gray-300"
-              />
-              <label htmlFor="card-payment" className="ml-3 flex items-center cursor-pointer">
-                <i className="fas fa-credit-card text-2xl text-gold mr-3"></i>
-                <div>
-                  <div className="font-semibold text-gray-800">Card Payment</div>
-                  <div className="text-sm text-gray-600">Pay securely with your card</div>
-                </div>
-              </label>
+                }`}
+              onClick={() => setPaymentMethod('card')}
+            >
+              <div className="flex items-center">
+                <input
+                  type="radio"
+                  id="card-payment"
+                  name="payment-method"
+                  value="card"
+                  checked={paymentMethod === 'card'}
+                  onChange={() => setPaymentMethod('card')}
+                  className="w-5 h-5 text-gold focus:ring-gold border-gray-300"
+                />
+                <label htmlFor="card-payment" className="ml-3 flex items-center cursor-pointer">
+                  <i className="fas fa-credit-card text-2xl text-gold mr-3"></i>
+                  <div>
+                    <div className="font-semibold text-gray-800">Card Payment</div>
+                    <div className="text-sm text-gray-600">Pay securely with your card</div>
+                  </div>
+                </label>
+              </div>
             </div>
-          </div>
 
-          <div
-            className={`border-2 rounded-xl p-4 cursor-pointer transition-all duration-300 ${paymentMethod === 'bank_transfer'
+            <div
+              className={`border-2 rounded-xl p-4 cursor-pointer transition-all duration-300 ${paymentMethod === 'bank_transfer'
                 ? 'border-gold bg-gold bg-opacity-10'
                 : 'border-gray-200 hover:border-gold-light'
-              }`}
-            onClick={() => setPaymentMethod('bank_transfer')}
-          >
-            <div className="flex items-center">
-              <input
-                type="radio"
-                id="bank-transfer"
-                name="payment-method"
-                value="bank_transfer"
-                checked={paymentMethod === 'bank_transfer'}
-                onChange={() => setPaymentMethod('bank_transfer')}
-                className="w-5 h-5 text-gold focus:ring-gold border-gray-300"
-              />
-              <label htmlFor="bank-transfer" className="ml-3 flex items-center cursor-pointer">
-                <i className="fas fa-university text-2xl text-gold mr-3"></i>
-                <div>
-                  <div className="font-semibold text-gray-800">Bank Transfer</div>
-                  <div className="text-sm text-gray-600">Transfer directly to our account</div>
-                </div>
-              </label>
+                }`}
+              onClick={() => setPaymentMethod('bank_transfer')}
+            >
+              <div className="flex items-center">
+                <input
+                  type="radio"
+                  id="bank-transfer"
+                  name="payment-method"
+                  value="bank_transfer"
+                  checked={paymentMethod === 'bank_transfer'}
+                  onChange={() => setPaymentMethod('bank_transfer')}
+                  className="w-5 h-5 text-gold focus:ring-gold border-gray-300"
+                />
+                <label htmlFor="bank-transfer" className="ml-3 flex items-center cursor-pointer">
+                  <i className="fas fa-university text-2xl text-gold mr-3"></i>
+                  <div>
+                    <div className="font-semibold text-gray-800">Bank Transfer</div>
+                    <div className="text-sm text-gray-600">Transfer directly to our account</div>
+                  </div>
+                </label>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
-        <div className="lg:col-span-2 bg-white border border-gray-200 rounded-2xl p-8">
-          {paymentMethod === 'card' && (
-            <>
-              <h3 className="text-xl font-semibold text-primary-dark mb-6 pb-3 border-b border-gray-200 flex items-center">
-                <i className="fas fa-credit-card text-gold mr-3"></i>
-                Card Payment Details
-              </h3>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
+          <div className="lg:col-span-2 bg-white border border-gray-200 rounded-2xl p-8">
+            {paymentMethod === 'card' && (
+              <>
+                <h3 className="text-xl font-semibold text-primary-dark mb-6 pb-3 border-b border-gray-200 flex items-center">
+                  <i className="fas fa-credit-card text-gold mr-3"></i>
+                  Card Payment Details
+                </h3>
 
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-gray-700 mb-3 font-medium">
-                    Card Number
-                  </label>
-                  <div className="relative">
-                    <i className={`fas ${getCardIcon()} absolute left-4 top-1/2 transform -translate-y-1/2 ${cardType ? 'text-blue-500' : 'text-gray-400'}`}></i>
-                    <input
-                      type="text"
-                      value={cardNumber}
-                      onChange={handleCardNumberChange}
-                      placeholder="1234 5678 9012 3456"
-                      className="w-full pl-4 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
-                      maxLength={19} // 16 digits + 3 spaces
-                    />
-                    {cardNumber && (
-                      <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-sm text-gray-500">
-                        {cardNumber.replace(/\s/g, '').length}/16
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-6">
                   <div>
                     <label className="block text-gray-700 mb-3 font-medium">
-                      Expiry Date
+                      Card Number
+                    </label>
+                    <div className="relative">
+                      <i className={`fas ${getCardIcon()} absolute left-4 top-1/2 transform -translate-y-1/2 ${cardType ? 'text-blue-500' : 'text-gray-400'}`}></i>
+                      <input
+                        type="text"
+                        value={cardNumber}
+                        onChange={handleCardNumberChange}
+                        placeholder="1234 5678 9012 3456"
+                        className="w-full pl-4 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
+                        maxLength={19} // 16 digits + 3 spaces
+                      />
+                      {cardNumber && (
+                        <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-sm text-gray-500">
+                          {cardNumber.replace(/\s/g, '').length}/16
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-gray-700 mb-3 font-medium">
+                        Expiry Date
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="MM/YY"
+                        className="w-full px-5 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 mb-3 font-medium">
+                        CVV
+                      </label>
+                      <div className="relative">
+                        <i
+                          className="fas fa-question-circle absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 cursor-help"
+                          title="3-digit code on the back of your card"
+                        ></i>
+                        <input
+                          type="text"
+                          placeholder="123"
+                          className="w-full px-5 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-700 mb-3 font-medium">
+                      Cardholder Name
                     </label>
                     <input
                       type="text"
-                      placeholder="MM/YY"
+                      placeholder="John Doe"
                       className="w-full px-5 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
                     />
                   </div>
+                </div>
+
+                <div className="space-y-6">
                   <div>
                     <label className="block text-gray-700 mb-3 font-medium">
-                      CVV
+                      Card Number
                     </label>
                     <div className="relative">
-                      <i
-                        className="fas fa-question-circle absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 cursor-help"
-                        title="3-digit code on the back of your card"
-                      ></i>
+                      <i className={`fas ${getCardIcon()} absolute left-4 top-1/2 transform -translate-y-1/2 ${cardType ? 'text-blue-500' : 'text-gray-400'}`}></i>
+                      <input
+                        type="text"
+                        value={cardNumber}
+                        onChange={handleCardNumberChange}
+                        placeholder="1234 5678 9012 3456"
+                        className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
+                        maxLength={19}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-gray-700 mb-3 font-medium">
+                        Expiry Date
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="MM/YY"
+                        className="w-full px-5 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 mb-3 font-medium">
+                        CVV
+                      </label>
                       <input
                         type="text"
                         placeholder="123"
+                        maxLength={3}
                         className="w-full px-5 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
                       />
                     </div>
                   </div>
-                </div>
 
-                <div>
-                  <label className="block text-gray-700 mb-3 font-medium">
-                    Cardholder Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="John Doe"
-                    className="w-full px-5 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-gray-700 mb-3 font-medium">
-                    Card Number
-                  </label>
-                  <div className="relative">
-                    <i className={`fas ${getCardIcon()} absolute left-4 top-1/2 transform -translate-y-1/2 ${cardType ? 'text-blue-500' : 'text-gray-400'}`}></i>
-                    <input
-                      type="text"
-                      value={cardNumber}
-                      onChange={handleCardNumberChange}
-                      placeholder="1234 5678 9012 3456"
-                      className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
-                      maxLength={19}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-gray-700 mb-3 font-medium">
-                      Expiry Date
+                      Cardholder Name
                     </label>
                     <input
                       type="text"
-                      placeholder="MM/YY"
+                      placeholder="John Doe"
                       className="w-full px-5 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
                     />
                   </div>
-                  <div>
-                    <label className="block text-gray-700 mb-3 font-medium">
-                      CVV
-                    </label>
+
+                  <div className="flex items-center">
                     <input
-                      type="text"
-                      placeholder="123"
-                      maxLength={3}
-                      className="w-full px-5 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
+                      type="checkbox"
+                      id="saveCard"
+                      checked={saveCard}
+                      onChange={() => setSaveCard(!saveCard)}
+                      className="mr-3 w-5 h-5 text-gold focus:ring-gold border-gray-300 rounded"
                     />
+                    <label htmlFor="saveCard" className="text-gray-700">
+                      Save card details for future payments
+                    </label>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {paymentMethod === 'bank_transfer' && (
+              <>
+                <h3 className="text-xl font-semibold text-primary-dark mb-6 pb-3 border-b border-gray-200 flex items-center">
+                  <i className="fas fa-university text-gold mr-3"></i>
+                  Bank Transfer Details
+                </h3>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-6">
+                  <h4 className="font-semibold text-blue-800 mb-3">Bank Account Details</h4>
+                  <div className="space-y-2 text-sm text-blue-700">
+                    <div className="flex justify-between">
+                      <span className="font-medium">Bank Name:</span>
+                      <span>Bank of Ceylon</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium">Account Name:</span>
+                      <span>Lanka Spa Association</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium">Account Number:</span>
+                      <span>123-456-789-001</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium">Branch:</span>
+                      <span>Colombo Main Branch</span>
+                    </div>
+                    <div className="flex justify-between font-semibold text-lg text-blue-800 border-t border-blue-200 pt-2 mt-2">
+                      <span>Amount:</span>
+                      <span>LKR 5,000.00</span>
+                    </div>
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-gray-700 mb-3 font-medium">
-                    Cardholder Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="John Doe"
-                    className="w-full px-5 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gold-light focus:border-gold transition-all duration-300"
-                  />
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 mb-6">
+                  <div className="flex items-start">
+                    <i className="fas fa-exclamation-triangle text-amber-500 mt-1 mr-3"></i>
+                    <div>
+                      <h4 className="font-semibold text-amber-800 mb-2">Important Instructions</h4>
+                      <ul className="text-sm text-amber-700 space-y-1">
+                        <li>• Transfer the exact amount of LKR 5,000.00</li>
+                        <li>• Use your NIC number as the reference</li>
+                        <li>• Keep the bank slip as proof of payment</li>
+                        <li>• Your registration will be pending until payment is verified</li>
+                        <li>• Verification usually takes 1-2 business days</li>
+                      </ul>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="saveCard"
-                    checked={saveCard}
-                    onChange={() => setSaveCard(!saveCard)}
-                    className="mr-3 w-5 h-5 text-gold focus:ring-gold border-gray-300 rounded"
-                  />
-                  <label htmlFor="saveCard" className="text-gray-700">
-                    Save card details for future payments
-                  </label>
+                <div className="bg-white border border-gray-200 rounded-xl p-6">
+                  <h4 className="font-semibold text-gray-800 mb-4 flex items-center">
+                    <i className="fas fa-upload text-gold mr-3"></i>
+                    Upload Bank Transfer Slip
+                    <span className="text-red-500 ml-1 font-semibold">*</span>
+                  </h4>
+
+                  <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center transition-all duration-300 hover:border-gold hover:bg-gray-50">
+                    {bankSlip ? (
+                      <div className="flex items-center justify-center">
+                        <i className="fas fa-file-image text-green-500 text-3xl mr-3"></i>
+                        <div>
+                          <p className="text-green-600 font-medium">{bankSlip.name}</p>
+                          <p className="text-sm text-gray-500">
+                            Size: {(bankSlip.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setBankSlip(null)}
+                            className="text-red-500 hover:text-red-700 text-sm mt-2 underline"
+                          >
+                            Remove file
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <i className="fas fa-cloud-upload-alt text-gray-400 text-4xl mb-4"></i>
+                        <p className="text-gray-600 mb-2">
+                          Click to upload your bank transfer slip
+                        </p>
+                        <p className="text-sm text-gray-400 mb-4">
+                          JPG, PNG, PDF (Max 10MB)
+                        </p>
+                        <input
+                          type="file"
+                          name="bankSlip"
+                          accept="image/*,.pdf"
+                          onChange={(e) => setBankSlip(e.target.files[0])}
+                          className="hidden"
+                          id="bankSlipUpload"
+                          required={paymentMethod === 'bank_transfer'}
+                        />
+                        <label
+                          htmlFor="bankSlipUpload"
+                          className="bg-gradient-to-r from-gold-light to-gold text-primary-dark px-6 py-3 rounded-lg inline-block cursor-pointer font-semibold transition-all duration-300 hover:shadow-lg"
+                        >
+                          Select File
+                        </label>
+                      </>
+                    )}
+                  </div>
+
+                  <p className="text-sm text-gray-500 mt-3">
+                    Please ensure the bank slip clearly shows the transfer amount, date, and reference number.
+                  </p>
                 </div>
+              </>
+            )}
+          </div>
+
+          <div className="bg-gradient-to-b from-gold-light to-gold rounded-2xl p-8 text-primary-dark">
+            <div className="text-center mb-6">
+              <div className="w-20 h-20 bg-white bg-opacity-20 rounded-full flex items-center justify-center mx-auto mb-5">
+                <i className="fas fa-credit-card text-white text-3xl"></i>
               </div>
-            </>
-          )}
-
-          {paymentMethod === 'bank_transfer' && (
-            <>
-              <h3 className="text-xl font-semibold text-primary-dark mb-6 pb-3 border-b border-gray-200 flex items-center">
-                <i className="fas fa-university text-gold mr-3"></i>
-                Bank Transfer Details
-              </h3>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-6">
-                <h4 className="font-semibold text-blue-800 mb-3">Bank Account Details</h4>
-                <div className="space-y-2 text-sm text-blue-700">
-                  <div className="flex justify-between">
-                    <span className="font-medium">Bank Name:</span>
-                    <span>Bank of Ceylon</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-medium">Account Name:</span>
-                    <span>Lanka Spa Association</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-medium">Account Number:</span>
-                    <span>123-456-789-001</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-medium">Branch:</span>
-                    <span>Colombo Main Branch</span>
-                  </div>
-                  <div className="flex justify-between font-semibold text-lg text-blue-800 border-t border-blue-200 pt-2 mt-2">
-                    <span>Amount:</span>
-                    <span>LKR 5,000.00</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
-                <div className="flex items-start">
-                  <i className="fas fa-exclamation-triangle text-amber-500 mt-1 mr-3"></i>
-                  <div>
-                    <h4 className="font-semibold text-amber-800 mb-2">Important Instructions</h4>
-                    <ul className="text-sm text-amber-700 space-y-1">
-                      <li>• Transfer the exact amount of LKR 5,000.00</li>
-                      <li>• Use your NIC number as the reference</li>
-                      <li>• Keep the bank slip as proof of payment</li>
-                      <li>• Your registration will be pending until payment is verified</li>
-                      <li>• Verification usually takes 1-2 business days</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="bg-gradient-to-b from-gold-light to-gold rounded-2xl p-8 text-primary-dark">
-          <div className="text-center mb-6">
-            <div className="w-20 h-20 bg-white bg-opacity-20 rounded-full flex items-center justify-center mx-auto mb-5">
-              <i className="fas fa-credit-card text-white text-3xl"></i>
+              <h3 className="text-xl font-semibold mb-2">Registration Fee</h3>
+              <p className="text-4xl font-bold my-3">LKR 5,000</p>
+              <p className="text-primary-dark text-opacity-80">
+                One-time payment for annual membership
+              </p>
             </div>
-            <h3 className="text-xl font-semibold mb-2">Registration Fee</h3>
-            <p className="text-4xl font-bold my-3">LKR 5,000</p>
-            <p className="text-primary-dark text-opacity-80">
-              One-time payment for annual membership
-            </p>
-          </div>
 
-          <div className="bg-white bg-opacity-20 rounded-xl p-5 mt-6">
-            <h4 className="font-semibold mb-3">Membership Benefits</h4>
-            <ul className="space-y-2 text-sm">
-              <li className="flex items-center">
-                <i className="fas fa-check-circle mr-2"></i> Premium listing in
-                our directory
-              </li>
-              <li className="flex items-center">
-                <i className="fas fa-check-circle mr-2"></i> Exclusive
-                networking events
-              </li>
-              <li className="flex items-center">
-                <i className="fas fa-check-circle mr-2"></i> Professional
-                certification
-              </li>
-              <li className="flex items-center">
-                <i className="fas fa-check-circle mr-2"></i> Marketing support
-              </li>
-              <li className="flex items-center">
-                <i className="fas fa-check-circle mr-2"></i> Industry insights &
-                reports
-              </li>
-            </ul>
+            <div className="bg-white bg-opacity-20 rounded-xl p-5 mt-6">
+              <h4 className="font-semibold mb-3">Membership Benefits</h4>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center">
+                  <i className="fas fa-check-circle mr-2"></i> Premium listing in
+                  our directory
+                </li>
+                <li className="flex items-center">
+                  <i className="fas fa-check-circle mr-2"></i> Exclusive
+                  networking events
+                </li>
+                <li className="flex items-center">
+                  <i className="fas fa-check-circle mr-2"></i> Professional
+                  certification
+                </li>
+                <li className="flex items-center">
+                  <i className="fas fa-check-circle mr-2"></i> Marketing support
+                </li>
+                <li className="flex items-center">
+                  <i className="fas fa-check-circle mr-2"></i> Industry insights &
+                  reports
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="flex justify-between pt-6">
-        <button
-          onClick={onBack}
-          className="bg-white text-primary-dark border border-gray-300 px-8 py-3 rounded-xl font-semibold transition-all duration-300 hover:border-gold hover:shadow-lg flex items-center"
-        >
-          <i className="fas fa-arrow-left mr-2"></i>Back
-        </button>
-        <button
-          onClick={onPaymentSuccess}
-          className="bg-gradient-to-r from-gold-light to-gold text-primary-dark px-8 py-3 rounded-xl font-semibold transition-all duration-300 hover:shadow-lg flex items-center"
-        >
-          Complete Payment<i className="fas fa-lock ml-2"></i>
-        </button>
+        <div className="flex justify-between pt-6">
+          <button
+            onClick={onBack}
+            className="bg-white text-primary-dark border border-gray-300 px-8 py-3 rounded-xl font-semibold transition-all duration-300 hover:border-gold hover:shadow-lg flex items-center"
+          >
+            <i className="fas fa-arrow-left mr-2"></i>Back
+          </button>
+          <button
+            type="submit"
+            disabled={isProcessing || (paymentMethod === 'bank_transfer' && !bankSlip)}
+            className={`px-8 py-3 rounded-xl font-semibold transition-all duration-300 hover:shadow-lg flex items-center ${isProcessing || (paymentMethod === 'bank_transfer' && !bankSlip)
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-gradient-to-r from-gold-light to-gold text-primary-dark hover:shadow-lg'
+              }`}
+          >
+            {isProcessing ? (
+              <>
+                <i className="fas fa-spinner fa-spin mr-2"></i>
+                Processing...
+              </>
+            ) : (
+              <>
+                Complete Registration<i className="fas fa-check ml-2"></i>
+              </>
+            )}
+          </button>
+        </div>
       </div>
-    </div>
+    </form>
   );
 };
 
@@ -1067,7 +1288,6 @@ const Registration = () => {
     nicFront: null,
     nicBack: null,
     spaName: "",
-    // Replaced single spaAddress with separate address fields
     spaAddressLine1: "",
     spaAddressLine2: "",
     spaProvince: "",
@@ -1075,6 +1295,10 @@ const Registration = () => {
     spaTelephone: "",
     spaBRNumber: "",
     brAttachment: null,
+    form1Certificate: null,
+    spaPhotosBanner: null,
+    facilityPhotos: [],
+    professionalCertifications: [],
     otherDocument: null,
   });
 
@@ -1195,6 +1419,7 @@ const Registration = () => {
       case 4:
         return (
           <PaymentStep
+            userDetails={userDetails}
             onBack={() => setStep(3)}
             onPaymentSuccess={handlePaymentSuccess}
           />

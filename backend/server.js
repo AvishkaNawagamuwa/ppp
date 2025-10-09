@@ -11,6 +11,7 @@ const spaRoutes = require('./routes/spaRoutes');
 const adminLSARoutes = require('./routes/adminLSARoutes');
 const therapistRoutes = require('./routes/therapistRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const notificationHistoryRoutes = require('./routes/notificationHistoryRoutes');
 
 // Import enhanced routes
 const enhancedRegistrationRoutes = require('./routes/enhancedRegistrationRoutes');
@@ -70,6 +71,7 @@ app.use('/api', uploadRoutes);
 app.use('/api/spa', spaRoutes);
 app.use('/api/lsa', adminLSARoutes);
 app.use('/api/lsa', notificationRoutes); // Add notification routes (LSA specific)
+app.use('/api/lsa', notificationHistoryRoutes); // Add notification history routes (LSA specific)
 app.use('/api/notifications', notificationRoutes); // Add notification routes (general)
 app.use('/api/therapists', therapistRoutes);
 
