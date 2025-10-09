@@ -293,7 +293,7 @@ router.get('/spas/:spaId/therapists', async (req, res) => {
                 // If parsing fails, treat as comma-separated string or single value
                 if (therapist.specializations) {
                     const specString = String(therapist.specializations);
-                    specializations = specString.includes(',') 
+                    specializations = specString.includes(',')
                         ? specString.split(',').map(s => s.trim())
                         : [specString.trim()];
                 } else {
@@ -653,6 +653,97 @@ router.patch('/notifications/:id/read', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Failed to mark notification as read'
+        });
+    }
+});
+
+// Update therapist status (resign/terminate)
+router.put('/therapists/:therapistId/status', async (req, res) => {
+    try {
+        const { therapistId } = req.params;
+        const { status, reason, spa_id } = req.body;
+
+        // Validate required fields
+        if (!status || !spa_id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Status and spa_id are required'
+            });
+        }
+
+        // Validate status values
+        const validStatuses = ['resigned', 'terminated'];
+        if (!validStatuses.includes(status)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid status. Must be "resigned" or "terminated"'
+            });
+        }
+
+        // For termination, reason is required
+        if (status === 'terminated' && (!reason || !reason.trim())) {
+            return res.status(400).json({
+                success: false,
+                message: 'Termination reason is required'
+            });
+        }
+
+        // Check if therapist exists and is approved
+        const [existingTherapist] = await db.execute(
+            'SELECT id, status, first_name, last_name, name FROM therapists WHERE id = ? AND spa_id = ?',
+            [therapistId, spa_id]
+        );
+
+        if (existingTherapist.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Therapist not found'
+            });
+        }
+
+        if (existingTherapist[0].status !== 'approved') {
+            return res.status(400).json({
+                success: false,
+                message: 'Only approved therapists can be resigned or terminated'
+            });
+        }
+
+        // Update therapist status
+        const updateQuery = status === 'terminated'
+            ? 'UPDATE therapists SET status = ?, terminate_reason = ?, updated_at = NOW() WHERE id = ? AND spa_id = ?'
+            : 'UPDATE therapists SET status = ?, resign_reason = ?, updated_at = NOW() WHERE id = ? AND spa_id = ?';
+
+        const updateParams = status === 'terminated'
+            ? [status, reason || null, therapistId, spa_id]
+            : [status, reason || 'Voluntary resignation', therapistId, spa_id];
+
+        await db.execute(updateQuery, updateParams);
+
+        // Log the activity
+        const therapistName = existingTherapist[0].first_name && existingTherapist[0].last_name
+            ? `${existingTherapist[0].first_name} ${existingTherapist[0].last_name}`
+            : existingTherapist[0].name || 'Unknown Therapist';
+        const activityDescription = status === 'terminated'
+            ? `Therapist ${therapistName} has been terminated. Reason: ${reason}`
+            : `Therapist ${therapistName} has resigned.`;
+
+        await db.execute(
+            'INSERT INTO activity_logs (entity_type, entity_id, action, description, actor_type, actor_id, actor_name, old_status, new_status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+            ['therapist', therapistId, status, activityDescription, 'spa', spa_id, 'SPA Admin', 'approved', status]
+        );
+
+        res.json({
+            success: true,
+            message: `Therapist ${status} successfully`,
+            id: therapistId,
+            status: status
+        });
+
+    } catch (error) {
+        console.error('Error updating therapist status:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to update therapist status'
         });
     }
 });

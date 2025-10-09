@@ -10,10 +10,7 @@ const pool = mysql.createPool({
   database: 'lsa_spa_management',
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0,
-  acquireTimeout: 60000,
-  timeout: 60000,
-  reconnect: true
+  queueLimit: 0
 });
 
 // Promise wrapper for async/await support

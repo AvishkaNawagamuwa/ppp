@@ -8,7 +8,7 @@ require('dotenv').config();
 
 async function checkDatabase() {
     console.log('🔍 Checking database connection and therapist data...\n');
-    
+
     try {
         // Create database connection
         const connection = await mysql.createConnection({
@@ -70,11 +70,11 @@ async function checkDatabase() {
             FROM therapists 
             WHERE spa_id = 1
         `);
-        
+
         console.log(`\n🏢 Therapists for SPA ID 1: ${spaOneData[0].count}`);
 
         await connection.end();
-        
+
     } catch (error) {
         console.error('❌ Database check failed:', error.message);
     }

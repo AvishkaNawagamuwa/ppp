@@ -778,8 +778,8 @@ const AddTherapist = () => {
                             onClick={handleSubmit}
                             disabled={loading}
                             className={`flex items-center px-8 py-3 rounded-lg font-medium ${loading
-                                    ? 'bg-gray-400 text-white cursor-not-allowed'
-                                    : 'bg-green-600 text-white hover:bg-green-700'
+                                ? 'bg-gray-400 text-white cursor-not-allowed'
+                                : 'bg-green-600 text-white hover:bg-green-700'
                                 }`}
                         >
                             {loading ? (
@@ -912,7 +912,7 @@ const ViewTherapists = () => {
         try {
             const response = await fetch(`/api/admin-spa-new/spas/${spaId}/therapists?status=${status}`);
             const data = await response.json();
-            
+
             if (data.success) {
                 setTherapists(data.therapists || []);
             } else {
@@ -937,7 +937,7 @@ const ViewTherapists = () => {
     const getDisplayStatus = (dbStatus) => {
         const statusMap = {
             'approved': 'Active',
-            'pending': 'Pending Review', 
+            'pending': 'Pending Review',
             'rejected': 'Rejected',
             'resigned': 'Resigned',
             'terminated': 'Terminated',
@@ -949,14 +949,14 @@ const ViewTherapists = () => {
     // Format therapist data for display
     const formatTherapist = (therapist) => ({
         id: therapist.id,
-        name: therapist.first_name && therapist.last_name 
-            ? `${therapist.first_name} ${therapist.last_name}` 
+        name: therapist.first_name && therapist.last_name
+            ? `${therapist.first_name} ${therapist.last_name}`
             : therapist.name || 'Unknown',
         email: therapist.email,
         nic: therapist.nic_number || therapist.nic,
         phone: therapist.phone,
-        specialization: Array.isArray(therapist.specializations) 
-            ? therapist.specializations.join(', ') 
+        specialization: Array.isArray(therapist.specializations)
+            ? therapist.specializations.join(', ')
             : (therapist.specializations ? JSON.parse(therapist.specializations || '[]').join(', ') : 'General Therapy'),
         status: getDisplayStatus(therapist.status),
         dbStatus: therapist.status,
@@ -973,14 +973,14 @@ const ViewTherapists = () => {
     const filteredTherapists = therapists
         .map(formatTherapist)
         .filter(therapist => {
-            const matchesSearch = 
+            const matchesSearch =
                 therapist.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 therapist.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 therapist.nic.includes(searchTerm) ||
                 therapist.specialization.toLowerCase().includes(searchTerm.toLowerCase());
-            
+
             const matchesTab = therapist.dbStatus === activeTab;
-            
+
             return matchesSearch && matchesTab;
         });
 
@@ -1205,37 +1205,96 @@ const ViewTherapists = () => {
     );
 };
 
-// ResignTerminate Component with Direct Actions
+// ResignTerminate Component with Dynamic Database Integration
 const ResignTerminate = () => {
     const [showTerminateModal, setShowTerminateModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedTherapist, setSelectedTherapist] = useState(null);
     const [terminateReason, setTerminateReason] = useState('');
+    const [therapists, setTherapists] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
 
-    const therapists = [
-        { id: 1, name: 'Dr. Amara Silva', email: 'amara@spa.com', nic: '199412345678', specialization: 'Swedish Massage', status: 'active' },
-        { id: 2, name: 'Priya Fernando', email: 'priya@spa.com', nic: '199012345679', specialization: 'Deep Tissue', status: 'active' },
-        { id: 3, name: 'Kasun Perera', email: 'kasun@spa.com', nic: '198912345680', specialization: 'Thai Massage', status: 'active' }
-    ];
+    // Get spa_id from localStorage or use default
+    const spaId = localStorage.getItem('spa_id') || '1';
+
+    // Fetch approved therapists from database
+    const fetchApprovedTherapists = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await fetch(`/api/admin-spa-new/spas/${spaId}/therapists?status=approved`);
+            const data = await response.json();
+
+            if (data.success) {
+                setTherapists(data.therapists || []);
+            } else {
+                setError('Failed to fetch approved therapists');
+                setTherapists([]);
+            }
+        } catch (err) {
+            console.error('Error fetching approved therapists:', err);
+            setError('Network error. Please check your connection.');
+            setTherapists([]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Load therapists on component mount
+    useEffect(() => {
+        fetchApprovedTherapists();
+    }, [spaId]);
 
     const handleResign = (therapist) => {
+        const therapistName = `${therapist.first_name} ${therapist.last_name}` || therapist.name;
+
         Swal.fire({
             title: 'Confirm Resignation',
-            text: `Are you sure you want to resign ${therapist.name}?`,
+            text: `Are you sure you want to resign ${therapistName}?`,
             icon: 'question',
             showCancelButton: true,
-            confirmButtonColor: '#orange',
+            confirmButtonColor: '#f59e0b',
             cancelButtonColor: '#d33',
             confirmButtonText: 'Yes, Resign'
-        }).then((result) => {
+        }).then(async (result) => {
             if (result.isConfirmed) {
-                // Direct action - no AdminLSA approval needed
-                Swal.fire({
-                    title: 'Resigned!',
-                    text: `${therapist.name} has been resigned successfully.`,
-                    icon: 'success',
-                    confirmButtonColor: '#0A1428'
-                });
+                try {
+                    const response = await fetch(`/api/admin-spa-new/therapists/${therapist.id}/status`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            status: 'resigned',
+                            reason: 'Voluntary resignation',
+                            spa_id: spaId
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        Swal.fire({
+                            title: 'Resigned!',
+                            text: `${therapistName} has been resigned successfully.`,
+                            icon: 'success',
+                            confirmButtonColor: '#0A1428'
+                        });
+                        // Refresh the therapist list
+                        fetchApprovedTherapists();
+                    } else {
+                        throw new Error(data.message || 'Failed to update therapist status');
+                    }
+                } catch (error) {
+                    console.error('Error resigning therapist:', error);
+                    Swal.fire({
+                        title: 'Error!',
+                        text: 'Failed to resign therapist. Please try again.',
+                        icon: 'error',
+                        confirmButtonColor: '#0A1428'
+                    });
+                }
             }
         });
     };
@@ -1245,7 +1304,7 @@ const ResignTerminate = () => {
         setShowTerminateModal(true);
     };
 
-    const submitTermination = () => {
+    const submitTermination = async () => {
         if (!terminateReason.trim()) {
             Swal.fire({
                 title: 'Reason Required',
@@ -1256,29 +1315,81 @@ const ResignTerminate = () => {
             return;
         }
 
-        // Direct action - save to database with reason
-        Swal.fire({
-            title: 'Terminated!',
-            text: `${selectedTherapist.name} has been terminated successfully.`,
-            icon: 'success',
-            confirmButtonColor: '#0A1428'
-        });
+        const therapistName = `${selectedTherapist.first_name} ${selectedTherapist.last_name}` || selectedTherapist.name;
 
-        setShowTerminateModal(false);
-        setTerminateReason('');
-        setSelectedTherapist(null);
+        try {
+            const response = await fetch(`/api/admin-spa-new/therapists/${selectedTherapist.id}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    status: 'terminated',
+                    reason: terminateReason.trim(),
+                    spa_id: spaId
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                Swal.fire({
+                    title: 'Terminated!',
+                    text: `${therapistName} has been terminated successfully.`,
+                    icon: 'success',
+                    confirmButtonColor: '#0A1428'
+                });
+
+                // Refresh the therapist list
+                fetchApprovedTherapists();
+
+                // Close modal and reset
+                setShowTerminateModal(false);
+                setTerminateReason('');
+                setSelectedTherapist(null);
+            } else {
+                throw new Error(data.message || 'Failed to terminate therapist');
+            }
+        } catch (error) {
+            console.error('Error terminating therapist:', error);
+            Swal.fire({
+                title: 'Error!',
+                text: 'Failed to terminate therapist. Please try again.',
+                icon: 'error',
+                confirmButtonColor: '#0A1428'
+            });
+        }
     };
 
-    const filteredTherapists = therapists.filter(t =>
-        t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.nic.includes(searchTerm)
-    );
+    // Format therapist data and filter
+    const filteredTherapists = therapists
+        .map(therapist => ({
+            ...therapist,
+            name: therapist.first_name && therapist.last_name
+                ? `${therapist.first_name} ${therapist.last_name}`
+                : therapist.name || 'Unknown',
+            nic: therapist.nic_number || therapist.nic,
+            specialization: Array.isArray(therapist.specializations)
+                ? therapist.specializations.join(', ')
+                : (therapist.specializations ? therapist.specializations : 'General Therapy')
+        }))
+        .filter(t =>
+            t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            t.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            t.nic.includes(searchTerm) ||
+            t.specialization.toLowerCase().includes(searchTerm.toLowerCase())
+        );
 
     return (
         <div className="max-w-6xl mx-auto p-6">
             <div className="bg-white rounded-2xl shadow-lg p-8">
-                <h2 className="text-2xl font-bold text-gray-800 mb-6">Manage Staff - Resign/Terminate</h2>
+                <div className="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-800">Manage Staff - Resign/Terminate</h2>
+                        <p className="text-gray-600 mt-1">Manage approved therapists - resign or terminate</p>
+                    </div>
+                    <div className="text-sm text-gray-500">{filteredTherapists.length} approved therapist(s)</div>
+                </div>
 
                 <input
                     type="text"
@@ -1288,18 +1399,41 @@ const ResignTerminate = () => {
                     className="w-full p-3 mb-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0A1428] outline-none"
                 />
 
+                {/* Loading State */}
+                {loading && (
+                    <div className="flex justify-center items-center py-12">
+                        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#0A1428] border-t-transparent"></div>
+                        <span className="ml-2 text-gray-600">Loading approved therapists...</span>
+                    </div>
+                )}
+
+                {/* Error State */}
+                {error && !loading && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                        <div className="flex items-center">
+                            <span className="text-red-500 mr-2">⚠️</span>
+                            <p className="text-red-700">{error}</p>
+                            <button
+                                onClick={fetchApprovedTherapists}
+                                className="ml-auto text-red-600 hover:text-red-800 font-medium"
+                            >
+                                Retry
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredTherapists.map((therapist) => (
-                        <div key={therapist.id} className="bg-gray-50 rounded-xl p-6">
+                        <div key={therapist.therapist_id} className="bg-gray-50 rounded-xl p-6">
                             <div className="flex items-center space-x-3 mb-4">
                                 <div className="w-12 h-12 bg-[#0A1428] rounded-full flex items-center justify-center text-white font-semibold">
                                     {therapist.name.split(' ').map(n => n[0]).join('')}
                                 </div>
                                 <div>
                                     <h3 className="font-semibold text-gray-900">{therapist.name}</h3>
-                                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${therapist.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                                        }`}>
-                                        {therapist.status === 'pending_review' ? 'Pending Review' : therapist.status}
+                                    <span className="px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                                        Active
                                     </span>
                                 </div>
                             </div>
@@ -1308,25 +1442,37 @@ const ResignTerminate = () => {
                                 <div>NIC: {therapist.nic}</div>
                                 <div>Specialty: {therapist.specialization}</div>
                             </div>
-                            {therapist.status === 'active' && (
-                                <div className="flex space-x-2">
-                                    <button
-                                        onClick={() => handleResign(therapist)}
-                                        className="flex-1 bg-orange-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-orange-600"
-                                    >
-                                        Resign
-                                    </button>
-                                    <button
-                                        onClick={() => handleTerminate(therapist)}
-                                        className="flex-1 bg-red-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-red-600"
-                                    >
-                                        Terminate
-                                    </button>
-                                </div>
-                            )}
+                            <div className="flex space-x-2">
+                                <button
+                                    onClick={() => handleResign(therapist)}
+                                    className="flex-1 bg-orange-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-orange-600"
+                                >
+                                    Resign
+                                </button>
+                                <button
+                                    onClick={() => handleTerminate(therapist)}
+                                    className="flex-1 bg-red-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-red-600"
+                                >
+                                    Terminate
+                                </button>
+                            </div>
                         </div>
                     ))}
                 </div>
+
+                {/* No Results */}
+                {!loading && filteredTherapists.length === 0 && (
+                    <div className="text-center py-12">
+                        <div className="text-gray-400 mb-4 text-6xl">👥</div>
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">No approved therapists found</h3>
+                        <p className="text-gray-600">
+                            {searchTerm
+                                ? 'No therapists match your search criteria.'
+                                : 'No approved therapists available for resignation or termination.'
+                            }
+                        </p>
+                    </div>
+                )}
 
                 {/* Terminate Modal with Required Reason */}
                 {showTerminateModal && selectedTherapist && (
