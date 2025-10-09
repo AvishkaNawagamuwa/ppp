@@ -10,8 +10,27 @@ const PaymentPlans = () => {
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [bankTransferProof, setBankTransferProof] = useState(null);
     const [paymentProcessing, setPaymentProcessing] = useState(false);
+
+    // Enhanced payment form state
+    const [cardDetails, setCardDetails] = useState({
+        cardNumber: '',
+        expiry: '',
+        cvv: '',
+        holderName: ''
+    });
+    const [paymentType, setPaymentType] = useState('annual_fee');
+    const [validationErrors, setValidationErrors] = useState({});
+    const [bankSlipFile, setBankSlipFile] = useState(null);
     const [availablePlans, setAvailablePlans] = useState([]);
-    const { subscriptionStatus } = useContext(SpaContext);
+
+    // Handle SpaContext safely
+    let subscriptionStatus = 'inactive';
+    try {
+        const spaContext = useContext(SpaContext);
+        subscriptionStatus = spaContext?.subscriptionStatus || 'inactive';
+    } catch (error) {
+        console.warn('SpaContext not available, using default values');
+    }
 
     const currentDate = new Date('2025-10-03');
 
@@ -202,14 +221,194 @@ const PaymentPlans = () => {
         }
     };
 
+    // Card validation functions
+    const validateCard = () => {
+        const errors = {};
+
+        // Card holder name validation
+        if (!cardDetails.holderName.trim()) {
+            errors.holderName = 'Card holder name is required';
+        }
+
+        // Card number validation (basic Luhn algorithm)
+        const cardNumber = cardDetails.cardNumber.replace(/\s/g, '');
+        if (!cardNumber) {
+            errors.cardNumber = 'Card number is required';
+        } else if (cardNumber.length !== 16) {
+            errors.cardNumber = 'Card number must be 16 digits';
+        } else if (!isValidCardNumber(cardNumber)) {
+            errors.cardNumber = 'Invalid card number';
+        }
+
+        // Expiry validation
+        if (!cardDetails.expiry) {
+            errors.expiry = 'Expiry date is required';
+        } else {
+            const [month, year] = cardDetails.expiry.split('/');
+            const currentDate = new Date();
+            const currentYear = currentDate.getFullYear() % 100;
+            const currentMonth = currentDate.getMonth() + 1;
+
+            if (!month || !year || month > 12 || month < 1) {
+                errors.expiry = 'Invalid expiry date format';
+            } else if (parseInt(year) < currentYear ||
+                (parseInt(year) === currentYear && parseInt(month) < currentMonth)) {
+                errors.expiry = 'Card has expired';
+            }
+        }
+
+        // CVV validation
+        if (!cardDetails.cvv) {
+            errors.cvv = 'CVV is required';
+        } else if (cardDetails.cvv.length < 3) {
+            errors.cvv = 'CVV must be at least 3 digits';
+        }
+
+        return errors;
+    };
+
+    // Basic Luhn algorithm for card validation
+    const isValidCardNumber = (cardNumber) => {
+        let sum = 0;
+        let isEven = false;
+
+        for (let i = cardNumber.length - 1; i >= 0; i--) {
+            let digit = parseInt(cardNumber.charAt(i));
+
+            if (isEven) {
+                digit *= 2;
+                if (digit > 9) {
+                    digit -= 9;
+                }
+            }
+
+            sum += digit;
+            isEven = !isEven;
+        }
+
+        return sum % 10 === 0;
+    };
+
     const handlePayNow = () => {
         const planData = plans.find(p => p.id === selectedPlan);
         if (!planData) return;
 
         if (selectedPaymentMethod === 'card') {
-            processCardPayment(planData);
+            // Validate card details first
+            const errors = validateCard();
+            setValidationErrors(errors);
+
+            if (Object.keys(errors).length === 0) {
+                processEnhancedCardPayment(planData);
+            } else {
+                Swal.fire({
+                    title: 'Validation Error',
+                    text: 'Please fix the card details and try again.',
+                    icon: 'error',
+                    confirmButtonColor: '#001F3F'
+                });
+            }
         } else {
-            processBankTransfer(planData);
+            processEnhancedBankTransfer(planData);
+        }
+    };
+
+    const processEnhancedCardPayment = async (planData) => {
+        try {
+            setPaymentProcessing(true);
+
+            // Enhanced PayHere integration with validation
+            const paymentData = {
+                type: paymentType,
+                amount: planData.price,
+                method: 'card',
+                cardDetails: {
+                    ...cardDetails,
+                    cardNumber: cardDetails.cardNumber.replace(/\s/g, '') // Remove spaces
+                },
+                planId: planData.id
+            };
+
+            const response = await axios.post('/api/admin-spa-new/process-payment', paymentData);
+
+            if (response.data.success) {
+                Swal.fire({
+                    title: 'Payment Successful!',
+                    text: 'Your payment has been processed successfully.',
+                    icon: 'success',
+                    confirmButtonColor: '#001F3F'
+                }).then(() => {
+                    setShowPaymentModal(false);
+                    // Redirect to payment success page or refresh dashboard
+                    window.location.reload();
+                });
+            } else {
+                throw new Error(response.data.message || 'Payment failed');
+            }
+        } catch (error) {
+            console.error('Card payment error:', error);
+            Swal.fire({
+                title: 'Payment Failed',
+                text: error.response?.data?.message || 'Please try again or contact support.',
+                icon: 'error',
+                confirmButtonColor: '#001F3F'
+            });
+        } finally {
+            setPaymentProcessing(false);
+        }
+    };
+
+    const processEnhancedBankTransfer = async (planData) => {
+        try {
+            if (!bankSlipFile) {
+                Swal.fire({
+                    title: 'File Required',
+                    text: 'Please upload the bank transfer slip.',
+                    icon: 'warning',
+                    confirmButtonColor: '#001F3F'
+                });
+                return;
+            }
+
+            setPaymentProcessing(true);
+
+            // Create FormData for file upload
+            const formData = new FormData();
+            formData.append('type', paymentType);
+            formData.append('amount', planData.price);
+            formData.append('method', 'bank_transfer');
+            formData.append('slip', bankSlipFile);
+            formData.append('planId', planData.id);
+
+            const response = await axios.post('/api/admin-spa-new/process-payment', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+
+            if (response.data.success) {
+                Swal.fire({
+                    title: 'Upload Successful!',
+                    text: 'Your bank transfer slip has been uploaded. Payment will be verified by LSA Admin.',
+                    icon: 'success',
+                    confirmButtonColor: '#001F3F'
+                }).then(() => {
+                    setShowPaymentModal(false);
+                    setBankSlipFile(null);
+                });
+            } else {
+                throw new Error(response.data.message || 'Upload failed');
+            }
+        } catch (error) {
+            console.error('Bank transfer error:', error);
+            Swal.fire({
+                title: 'Upload Failed',
+                text: 'Please try again or contact support.',
+                icon: 'error',
+                confirmButtonColor: '#001F3F'
+            });
+        } finally {
+            setPaymentProcessing(false);
         }
     };
 
@@ -346,8 +545,8 @@ const PaymentPlans = () => {
                             <button
                                 onClick={() => handlePaymentMethodChange('card')}
                                 className={`p-4 border-2 rounded-lg transition-all ${selectedPaymentMethod === 'card'
-                                        ? 'border-[#001F3F] bg-blue-50'
-                                        : 'border-gray-200 hover:border-gray-300'
+                                    ? 'border-[#001F3F] bg-blue-50'
+                                    : 'border-gray-200 hover:border-gray-300'
                                     }`}
                             >
                                 <FiCreditCard className={`mx-auto mb-2 ${selectedPaymentMethod === 'card' ? 'text-[#001F3F]' : 'text-gray-400'}`} size={24} />
@@ -358,8 +557,8 @@ const PaymentPlans = () => {
                             <button
                                 onClick={() => handlePaymentMethodChange('bank_transfer')}
                                 className={`p-4 border-2 rounded-lg transition-all ${selectedPaymentMethod === 'bank_transfer'
-                                        ? 'border-[#001F3F] bg-blue-50'
-                                        : 'border-gray-200 hover:border-gray-300'
+                                    ? 'border-[#001F3F] bg-blue-50'
+                                    : 'border-gray-200 hover:border-gray-300'
                                     }`}
                             >
                                 <FiUpload className={`mx-auto mb-2 ${selectedPaymentMethod === 'bank_transfer' ? 'text-[#001F3F]' : 'text-gray-400'}`} size={24} />
@@ -367,6 +566,124 @@ const PaymentPlans = () => {
                                 <div className="text-xs text-gray-500">Manual Approval</div>
                             </button>
                         </div>
+
+                        {/* Payment Type Selection */}
+                        <div className="mb-6">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Payment Type</label>
+                            <select
+                                value={paymentType}
+                                onChange={(e) => setPaymentType(e.target.value)}
+                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#001F3F] focus:border-transparent"
+                            >
+                                <option value="registration_fee">Registration Fee</option>
+                                <option value="annual_fee">Annual Fee</option>
+                            </select>
+                        </div>
+
+                        {/* Card Details Form */}
+                        {selectedPaymentMethod === 'card' && (
+                            <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                <h5 className="font-medium text-gray-800 mb-4">Card Details</h5>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Card Holder Name <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="John Doe"
+                                            value={cardDetails.holderName}
+                                            onChange={(e) => setCardDetails({ ...cardDetails, holderName: e.target.value })}
+                                            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#001F3F] focus:border-transparent"
+                                        />
+                                        {validationErrors.holderName && (
+                                            <span className="text-red-500 text-sm">{validationErrors.holderName}</span>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Card Number <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="1234 5678 9012 3456"
+                                            value={cardDetails.cardNumber}
+                                            onChange={(e) => {
+                                                // Format card number with spaces
+                                                const value = e.target.value.replace(/\D/g, '').replace(/(\d{4})(?=\d)/g, '$1 ');
+                                                if (value.length <= 19) {
+                                                    setCardDetails({ ...cardDetails, cardNumber: value });
+                                                }
+                                            }}
+                                            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#001F3F] focus:border-transparent"
+                                            maxLength="19"
+                                        />
+                                        {validationErrors.cardNumber && (
+                                            <span className="text-red-500 text-sm">{validationErrors.cardNumber}</span>
+                                        )}
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Expiry Date <span className="text-red-500">*</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="MM/YY"
+                                                value={cardDetails.expiry}
+                                                onChange={(e) => {
+                                                    const value = e.target.value.replace(/\D/g, '');
+                                                    if (value.length <= 4) {
+                                                        const formatted = value.length >= 3 ?
+                                                            value.slice(0, 2) + '/' + value.slice(2) : value;
+                                                        setCardDetails({ ...cardDetails, expiry: formatted });
+                                                    }
+                                                }}
+                                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#001F3F] focus:border-transparent"
+                                                maxLength="5"
+                                            />
+                                            {validationErrors.expiry && (
+                                                <span className="text-red-500 text-sm">{validationErrors.expiry}</span>
+                                            )}
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                CVV <span className="text-red-500">*</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="123"
+                                                value={cardDetails.cvv}
+                                                onChange={(e) => {
+                                                    const value = e.target.value.replace(/\D/g, '');
+                                                    if (value.length <= 4) {
+                                                        setCardDetails({ ...cardDetails, cvv: value });
+                                                    }
+                                                }}
+                                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#001F3F] focus:border-transparent"
+                                                maxLength="4"
+                                            />
+                                            {validationErrors.cvv && (
+                                                <span className="text-red-500 text-sm">{validationErrors.cvv}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Validation Errors Display */}
+                                {Object.keys(validationErrors).length > 0 && (
+                                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                                        <div className="flex items-center">
+                                            <FiAlertCircle className="text-red-500 mr-2" size={16} />
+                                            <span className="text-red-700 text-sm font-medium">Please fix the following errors:</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {/* Bank Transfer Upload */}
                         {selectedPaymentMethod === 'bank_transfer' && (
@@ -385,12 +702,12 @@ const PaymentPlans = () => {
                                     <input
                                         type="file"
                                         accept="image/*,.pdf"
-                                        onChange={handleBankTransferUpload}
+                                        onChange={(e) => setBankSlipFile(e.target.files[0])}
                                         className="w-full p-2 border border-gray-300 rounded-lg"
                                     />
-                                    {bankTransferProof && (
+                                    {bankSlipFile && (
                                         <p className="text-sm text-green-600 mt-2">
-                                            ✓ File uploaded: {bankTransferProof.name}
+                                            ✓ File selected: {bankSlipFile.name}
                                         </p>
                                     )}
                                 </div>
@@ -400,7 +717,7 @@ const PaymentPlans = () => {
                         {/* Payment Button */}
                         <button
                             onClick={handlePayNow}
-                            disabled={paymentProcessing || (selectedPaymentMethod === 'bank_transfer' && !bankTransferProof)}
+                            disabled={paymentProcessing || (selectedPaymentMethod === 'bank_transfer' && !bankSlipFile)}
                             className="w-full bg-[#001F3F] text-white py-3 px-6 rounded-lg font-semibold hover:bg-opacity-90 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                         >
                             {paymentProcessing ? (

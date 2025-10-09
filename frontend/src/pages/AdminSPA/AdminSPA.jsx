@@ -22,6 +22,7 @@ import assets from '../../assets/images/images';
 import Dashboard from './Dashboard';
 import PaymentPlans from './PaymentPlans';
 import SpaProfile from './SpaProfile';
+import NotificationHistory from './NotificationHistory';
 
 // AddTherapist Component with NNF Flow
 const AddTherapist = () => {
@@ -1284,6 +1285,7 @@ const AdminSPA = () => {
     const navItems = [
         { id: 'dashboard', label: 'Dashboard', icon: <FiHome size={20} /> },
         { id: 'payment-plans', label: 'Payment Plans', icon: <FiCreditCard size={20} /> },
+        { id: 'notification-history', label: 'Notification History', icon: <FiBell size={20} /> },
         { id: 'add-therapist', label: 'Add Therapist', icon: <FiUserPlus size={20} /> },
         { id: 'view-therapists', label: 'View Therapists', icon: <FiUsers size={20} /> },
         { id: 'resign-terminate', label: 'Manage Staff', icon: <FiFilter size={20} /> },
@@ -1296,6 +1298,8 @@ const AdminSPA = () => {
                 return <Dashboard />;
             case 'payment-plans':
                 return <PaymentPlans />;
+            case 'notification-history':
+                return <NotificationHistory />;
             case 'add-therapist':
                 return <AddTherapist />;
             case 'view-therapists':
@@ -1496,7 +1500,7 @@ const AdminSPA = () => {
                                                                 </p>
                                                             </div>
                                                             <div className={`w-2 h-2 rounded-full mt-2 ${notification.type === 'approved' ? 'bg-green-500' :
-                                                                    notification.type === 'rejected' ? 'bg-red-500' : 'bg-blue-500'
+                                                                notification.type === 'rejected' ? 'bg-red-500' : 'bg-blue-500'
                                                                 }`}></div>
                                                         </div>
                                                     </div>

@@ -33,7 +33,191 @@ const upload = multer({
     }
 });
 
-// Get spa dashboard data
+// Get dynamic dashboard stats (Step 01)
+router.get('/dashboard-stats', async (req, res) => {
+    try {
+        // For demo purposes, using spa_id = 1. In production, get from JWT token or session
+        const spaId = 1;
+
+        // Get approved therapists count
+        const [approvedResult] = await db.execute(
+            'SELECT COUNT(*) as count FROM therapists WHERE spa_id = ? AND status = ?',
+            [spaId, 'approved']
+        );
+
+        // Get pending therapists count
+        const [pendingResult] = await db.execute(
+            'SELECT COUNT(*) as count FROM therapists WHERE spa_id = ? AND status = ?',
+            [spaId, 'pending']
+        );
+
+        res.json({
+            success: true,
+            approved_therapists: approvedResult[0].count,
+            pending_therapists: pendingResult[0].count
+        });
+
+    } catch (error) {
+        console.error('Dashboard stats error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch dashboard statistics',
+            approved_therapists: 0,
+            pending_therapists: 0
+        });
+    }
+});
+
+// Get recent activity for today and yesterday (Step 01)
+router.get('/recent-activity', async (req, res) => {
+    try {
+        // For demo purposes, using spa_id = 1. In production, get from JWT token or session
+        const spaId = 1;
+
+        // Get today and yesterday's dates
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+
+        const todayStr = today.toISOString().split('T')[0];
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+        // Get recent activities (add, request, response)
+        const [activities] = await db.execute(`
+            SELECT id, name, nic, status, created_at, updated_at
+            FROM therapists 
+            WHERE spa_id = ? 
+            AND status IN ('pending', 'approved', 'rejected')
+            AND DATE(created_at) >= ?
+            ORDER BY created_at DESC
+            LIMIT 10
+        `, [spaId, yesterdayStr]);
+
+        res.json(activities);
+
+    } catch (error) {
+        console.error('Recent activity error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch recent activities',
+            data: []
+        });
+    }
+});
+
+// Process payment - Enhanced (Step 02)
+router.post('/process-payment', upload.single('slip'), async (req, res) => {
+    try {
+        // For demo purposes, using spa_id = 1. In production, get from JWT token or session
+        const spaId = 1;
+        const { type, amount, method, planId } = req.body;
+
+        // Validate required fields
+        if (!type || !amount || !method) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required payment information'
+            });
+        }
+
+        let paymentData = {
+            spa_id: spaId,
+            type: type, // 'registration_fee' or 'annual_fee'
+            amount: parseFloat(amount),
+            method: method, // 'card' or 'bank_transfer'
+            status: 'pending',
+            created_at: new Date()
+        };
+
+        if (method === 'card') {
+            // Handle card payment with PayHere integration
+            const cardDetails = req.body.cardDetails;
+
+            // In production, integrate with PayHere API
+            // For now, simulate successful payment
+            paymentData.status = 'paid';
+            paymentData.payhere_order_id = 'ORDER_' + Date.now();
+            paymentData.card_details = JSON.stringify({
+                last4: cardDetails.cardNumber.slice(-4),
+                holderName: cardDetails.holderName
+            });
+
+            // Insert payment record
+            const [result] = await db.execute(
+                'INSERT INTO payments (spa_id, type, amount, method, status, payhere_order_id, card_details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                [paymentData.spa_id, paymentData.type, paymentData.amount, paymentData.method, paymentData.status, paymentData.payhere_order_id, paymentData.card_details, paymentData.created_at]
+            );
+
+            res.json({
+                success: true,
+                message: 'Payment processed successfully',
+                paymentId: result.insertId,
+                orderId: paymentData.payhere_order_id
+            });
+
+        } else if (method === 'bank_transfer') {
+            // Handle bank transfer with file upload
+            if (!req.file) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Bank transfer slip is required'
+                });
+            }
+
+            paymentData.slip_path = req.file.path;
+            paymentData.status = 'pending'; // Requires admin approval
+
+            // Insert payment record
+            const [result] = await db.execute(
+                'INSERT INTO payments (spa_id, type, amount, method, status, slip_path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [paymentData.spa_id, paymentData.type, paymentData.amount, paymentData.method, paymentData.status, paymentData.slip_path, paymentData.created_at]
+            );
+
+            res.json({
+                success: true,
+                message: 'Bank transfer slip uploaded successfully. Payment pending approval.',
+                paymentId: result.insertId
+            });
+        }
+
+    } catch (error) {
+        console.error('Payment processing error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Payment processing failed',
+            error: error.message
+        });
+    }
+});
+
+// Get notification history (Step 04)
+router.get('/notification-history', async (req, res) => {
+    try {
+        // For demo purposes, using spa_id = 1. In production, get from JWT token or session
+        const spaId = 1;
+
+        // Get approved and rejected therapist history with dates
+        const [history] = await db.execute(`
+            SELECT id, name, nic, status, created_at, updated_at, reject_reason
+            FROM therapists 
+            WHERE spa_id = ? 
+            AND status IN ('approved', 'rejected')
+            ORDER BY updated_at DESC, created_at DESC
+        `, [spaId]);
+
+        res.json(history);
+
+    } catch (error) {
+        console.error('Notification history error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch notification history',
+            data: []
+        });
+    }
+});
+
+// Get spa dashboard data (existing route - keeping for compatibility)
 router.get('/dashboard/:spaId', async (req, res) => {
     try {
         const spaId = req.params.spaId;
