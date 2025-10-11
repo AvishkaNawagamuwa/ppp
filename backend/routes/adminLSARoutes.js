@@ -299,11 +299,233 @@ router.put('/spas/:spaId/status', asyncHandler(async (req, res) => {
     }
 }));
 
+/**
+ * @route   GET /api/lsa/spas/:spaId/documents/:documentType
+ * @desc    View or download spa documents
+ * @access  Private (Admin)
+ */
+router.get('/spas/:spaId/documents/:documentType', asyncHandler(async (req, res) => {
+    try {
+        const { spaId, documentType } = req.params;
+        const { action = 'view' } = req.query; // view or download
+
+        // Get spa details to find document path
+        const spa = await SpaModel.getSpaById(spaId);
+        if (!spa) {
+            return res.status(404).json({
+                success: false,
+                message: 'Spa not found'
+            });
+        }
+
+        // Helper function to parse JSON fields
+        const parseJsonField = (field) => {
+            if (!field) return null;
+            try {
+                const parsed = JSON.parse(field);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    return parsed[0]; // Return first file path
+                }
+                return field; // Return as is if not JSON array
+            } catch (e) {
+                return field; // Return original value if not valid JSON
+            }
+        };
+
+        // Map document types to database columns with JSON parsing
+        const documentMap = {
+            'certificate': spa.certificate_path,
+            'form1_certificate': parseJsonField(spa.form1_certificate_path),
+            'nic_front': parseJsonField(spa.nic_front_path),
+            'nic_back': parseJsonField(spa.nic_back_path),
+            'br_attachment': parseJsonField(spa.br_attachment_path),
+            'other_document': parseJsonField(spa.other_document_path),
+            'spa_banner_photos': parseJsonField(spa.spa_banner_photos_path),
+            'spa_photos_banner': spa.spa_photos_banner_path || parseJsonField(spa.spa_banner_photos_path)
+        };
+
+        const documentPath = documentMap[documentType];
+        if (!documentPath) {
+            return res.status(404).json({
+                success: false,
+                message: 'Document not found or not uploaded'
+            });
+        }
+
+        const path = require('path');
+        const fs = require('fs');
+
+        // Check if it's a JSON array (multiple photos)
+        let filePaths = [];
+        if (documentType === 'spa_photos_banner' && spa.spa_photos_banner) {
+            try {
+                const photos = typeof spa.spa_photos_banner === 'string'
+                    ? JSON.parse(spa.spa_photos_banner)
+                    : spa.spa_photos_banner;
+                filePaths = Array.isArray(photos) ? photos : [photos];
+            } catch (e) {
+                filePaths = [documentPath];
+            }
+        } else {
+            filePaths = [documentPath];
+        }
+
+        // For multiple files, return list of available files
+        if (filePaths.length > 1) {
+            const availableFiles = filePaths.map((filePath, index) => ({
+                index,
+                filename: path.basename(filePath),
+                url: `/api/lsa/spas/${spaId}/documents/${documentType}/${index}`
+            }));
+
+            return res.json({
+                success: true,
+                message: 'Multiple documents found',
+                data: {
+                    type: 'multiple',
+                    files: availableFiles
+                }
+            });
+        }
+
+        // Handle single file
+        const fullPath = path.join(__dirname, '..', documentPath.replace('/uploads', 'uploads'));
+
+        if (!fs.existsSync(fullPath)) {
+            return res.status(404).json({
+                success: false,
+                message: 'Document file not found on server'
+            });
+        }
+
+        const filename = path.basename(fullPath);
+
+        if (action === 'download') {
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        } else {
+            res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+        }
+
+        // Set appropriate content type
+        const ext = path.extname(filename).toLowerCase();
+        const mimeTypes = {
+            '.pdf': 'application/pdf',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.gif': 'image/gif',
+            '.doc': 'application/msword',
+            '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        };
+
+        const contentType = mimeTypes[ext] || 'application/octet-stream';
+        res.setHeader('Content-Type', contentType);
+
+        // Stream the file
+        const fileStream = fs.createReadStream(fullPath);
+        fileStream.pipe(res);
+
+    } catch (error) {
+        console.error('Document access error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to access document',
+            error: error.message
+        });
+    }
+}));
+
+/**
+ * @route   GET /api/lsa/spas/:spaId/documents/:documentType/:fileIndex
+ * @desc    View or download specific spa document file (for multiple files)
+ * @access  Private (Admin)
+ */
+router.get('/spas/:spaId/documents/:documentType/:fileIndex', asyncHandler(async (req, res) => {
+    try {
+        const { spaId, documentType, fileIndex } = req.params;
+        const { action = 'view' } = req.query;
+
+        const spa = await SpaModel.getSpaById(spaId);
+        if (!spa) {
+            return res.status(404).json({
+                success: false,
+                message: 'Spa not found'
+            });
+        }
+
+        let filePaths = [];
+        if (documentType === 'spa_photos_banner' && spa.spa_photos_banner) {
+            try {
+                const photos = typeof spa.spa_photos_banner === 'string'
+                    ? JSON.parse(spa.spa_photos_banner)
+                    : spa.spa_photos_banner;
+                filePaths = Array.isArray(photos) ? photos : [photos];
+            } catch (e) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid document data format'
+                });
+            }
+        }
+
+        const index = parseInt(fileIndex);
+        if (index < 0 || index >= filePaths.length) {
+            return res.status(404).json({
+                success: false,
+                message: 'File index out of range'
+            });
+        }
+
+        const documentPath = filePaths[index];
+        const path = require('path');
+        const fs = require('fs');
+        const fullPath = path.join(__dirname, '..', documentPath.replace('/uploads', 'uploads'));
+
+        if (!fs.existsSync(fullPath)) {
+            return res.status(404).json({
+                success: false,
+                message: 'Document file not found on server'
+            });
+        }
+
+        const filename = path.basename(fullPath);
+
+        if (action === 'download') {
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        } else {
+            res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+        }
+
+        const ext = path.extname(filename).toLowerCase();
+        const mimeTypes = {
+            '.pdf': 'application/pdf',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.gif': 'image/gif'
+        };
+
+        const contentType = mimeTypes[ext] || 'application/octet-stream';
+        res.setHeader('Content-Type', contentType);
+
+        const fileStream = fs.createReadStream(fullPath);
+        fileStream.pipe(res);
+
+    } catch (error) {
+        console.error('Document access error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to access document',
+            error: error.message
+        });
+    }
+}));
+
 // ==================== THERAPIST MANAGEMENT ROUTES ====================
 
 /**
  * @route   GET /api/lsa/therapists
- * @desc    Get all therapists with filtering and pagination
+ * @desc    Get all therapists with complete details including documents
  * @access  Private (Admin)
  */
 router.get('/therapists', asyncHandler(async (req, res) => {
@@ -314,29 +536,152 @@ router.get('/therapists', asyncHandler(async (req, res) => {
             specialization,
             experience_level,
             page = 1,
-            limit = 10,
+            limit = 100,
             search
         } = req.query;
 
-        const filters = {
-            status,
-            spa_id,
-            specialization,
-            experience_level,
-            search,
-            page: parseInt(page),
-            limit: parseInt(limit)
-        };
+        console.log('📋 Fetching therapists with status:', status);
 
-        const therapists = await TherapistModel.getAllTherapists(filters);
+        // Build base query with all necessary fields
+        let query = `
+            SELECT 
+                t.id,
+                t.spa_id,
+                t.name,
+                t.first_name,
+                t.last_name,
+                t.date_of_birth,
+                t.nic,
+                t.nic_number,
+                t.email,
+                t.phone,
+                t.address,
+                t.nic_attachment,
+                t.medical_certificate,
+                t.spa_center_certificate,
+                t.therapist_image,
+                t.experience_years,
+                t.specialization,
+                t.specializations,
+                t.status,
+                t.reject_reason,
+                t.resignation_reason,
+                t.termination_reason,
+                t.approved_by,
+                t.approved_date,
+                t.created_at,
+                t.updated_at,
+                t.working_history,
+                t.current_spa_id,
+                t.total_experience_years,
+                t.notes,
+                s.name as spa_name,
+                s.owner_fname,
+                s.owner_lname
+            FROM therapists t 
+            LEFT JOIN spas s ON t.spa_id = s.id
+        `;
+
+        const params = [];
+        const conditions = [];
+
+        // Add status filter
+        if (status && status !== 'all') {
+            conditions.push('t.status = ?');
+            params.push(status);
+        }
+
+        // Add spa filter
+        if (spa_id) {
+            conditions.push('t.spa_id = ?');
+            params.push(spa_id);
+        }
+
+        // Add search filter
+        if (search) {
+            conditions.push('(t.name LIKE ? OR t.first_name LIKE ? OR t.last_name LIKE ? OR t.email LIKE ? OR t.phone LIKE ?)');
+            const searchTerm = `%${search}%`;
+            params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+        }
+
+        // Add conditions to query
+        if (conditions.length > 0) {
+            query += ' WHERE ' + conditions.join(' AND ');
+        }
+
+        query += ' ORDER BY t.created_at DESC';
+
+        // Add pagination if needed
+        if (page && limit) {
+            const offset = (parseInt(page) - 1) * parseInt(limit);
+            query += ` LIMIT ${parseInt(limit)} OFFSET ${offset}`;
+        }
+
+        console.log('🔍 Executing query:', query);
+        console.log('📝 With params:', params);
+
+        const [therapists] = await db.execute(query, params);
+
+        console.log('📊 Found', therapists.length, 'therapists');
+
+        // Transform the data to match frontend expectations
+        const transformedTherapists = therapists.map(therapist => ({
+            id: therapist.id,
+            therapist_id: therapist.id, // For backward compatibility
+            spa_id: therapist.spa_id,
+            name: therapist.name || `${therapist.first_name || ''} ${therapist.last_name || ''}`.trim(),
+            first_name: therapist.first_name,
+            last_name: therapist.last_name,
+            email: therapist.email,
+            phone: therapist.phone,
+            phone_number: therapist.phone, // Alternative field name
+            nic: therapist.nic || therapist.nic_number,
+            date_of_birth: therapist.date_of_birth,
+            birthday: therapist.date_of_birth, // Alternative field name
+            address: therapist.address,
+            experience_years: therapist.experience_years || 0,
+            specialization: therapist.specialization,
+            specializations: therapist.specializations,
+            status: therapist.status,
+            spa_name: therapist.spa_name,
+            owner_name: `${therapist.owner_fname || ''} ${therapist.owner_lname || ''}`.trim(),
+
+            // Document fields
+            nic_attachment: therapist.nic_attachment,
+            medical_certificate: therapist.medical_certificate,
+            spa_center_certificate: therapist.spa_center_certificate,
+            therapist_image: therapist.therapist_image,
+
+            // Status and admin fields
+            reject_reason: therapist.reject_reason,
+            rejection_reason: therapist.reject_reason, // Alternative field name
+            admin_comments: therapist.notes,
+            approved_by: therapist.approved_by,
+            approved_date: therapist.approved_date,
+
+            // Timestamps
+            created_at: therapist.created_at,
+            updated_at: therapist.updated_at,
+            registration_date: therapist.created_at, // Alternative field name
+
+            // Additional fields
+            working_history: therapist.working_history,
+            current_spa_id: therapist.current_spa_id,
+            total_experience_years: therapist.total_experience_years
+        }));
 
         res.json({
             success: true,
-            data: therapists
+            data: {
+                therapists: transformedTherapists,
+                total: transformedTherapists.length,
+                page: parseInt(page),
+                limit: parseInt(limit)
+            }
         });
 
     } catch (error) {
-        console.error('Get all therapists error:', error);
+        console.error('❌ Get all therapists error:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to fetch therapists',
@@ -529,6 +874,130 @@ router.put('/therapists/:therapistId/status', asyncHandler(async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to update therapist status',
+            error: error.message
+        });
+    }
+}));
+
+/**
+ * @route   GET /api/lsa/therapists/:therapistId/document/:documentType
+ * @desc    View or download therapist document
+ * @access  Private (Admin)
+ */
+router.get('/therapists/:therapistId/document/:documentType', asyncHandler(async (req, res) => {
+    try {
+        const { therapistId, documentType } = req.params;
+        const { action = 'view' } = req.query; // 'view' or 'download'
+
+        // Validate document type
+        const validDocuments = ['nic_attachment', 'medical_certificate', 'spa_center_certificate', 'therapist_image'];
+        if (!validDocuments.includes(documentType)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid document type'
+            });
+        }
+
+        // Get therapist document path from database
+        const [therapist] = await db.execute(
+            `SELECT ${documentType} FROM therapists WHERE id = ?`,
+            [therapistId]
+        );
+
+        if (!therapist || therapist.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Therapist not found'
+            });
+        }
+
+        const documentPath = therapist[0][documentType];
+        if (!documentPath) {
+            return res.status(404).json({
+                success: false,
+                message: 'Document not found'
+            });
+        }
+
+        const fs = require('fs');
+        const path = require('path');
+
+        // Normalize the document path (replace backslashes with forward slashes)
+        const normalizedPath = documentPath.replace(/\\/g, '/');
+
+        // Construct full file path
+        let fullPath;
+        if (normalizedPath.startsWith('/uploads/')) {
+            // Path starts with /uploads/, construct from backend directory
+            fullPath = path.join(__dirname, '..', normalizedPath.substring(1));
+        } else if (normalizedPath.startsWith('uploads/')) {
+            // Path starts with uploads/, construct from backend directory
+            fullPath = path.join(__dirname, '..', normalizedPath);
+        } else {
+            // Assume it's a relative path from uploads directory
+            fullPath = path.join(__dirname, '..', 'uploads', normalizedPath);
+        }
+
+        console.log('📁 Original path from DB:', documentPath);
+        console.log('📁 Normalized path:', normalizedPath);
+        console.log('📁 Looking for document at:', fullPath);
+
+        // Check if file exists
+        if (!fs.existsSync(fullPath)) {
+            return res.status(404).json({
+                success: false,
+                message: 'Document file not found on server'
+            });
+        }
+
+        // Get file info
+        const stat = fs.statSync(fullPath);
+        const fileExtension = path.extname(fullPath).toLowerCase();
+
+        // Set content type based on file extension
+        let contentType = 'application/octet-stream';
+        if (['.jpg', '.jpeg'].includes(fileExtension)) {
+            contentType = 'image/jpeg';
+        } else if (fileExtension === '.png') {
+            contentType = 'image/png';
+        } else if (fileExtension === '.pdf') {
+            contentType = 'application/pdf';
+        } else if (['.doc', '.docx'].includes(fileExtension)) {
+            contentType = 'application/msword';
+        }
+
+        // Set appropriate headers
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Length', stat.size);
+
+        if (action === 'download') {
+            // Force download
+            const filename = `therapist_${therapistId}_${documentType}${fileExtension}`;
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        } else {
+            // Display inline (for images and PDFs)
+            res.setHeader('Content-Disposition', 'inline');
+        }
+
+        // Stream the file
+        const readStream = fs.createReadStream(fullPath);
+        readStream.pipe(res);
+
+        readStream.on('error', (error) => {
+            console.error('❌ Error streaming document:', error);
+            if (!res.headersSent) {
+                res.status(500).json({
+                    success: false,
+                    message: 'Error streaming document'
+                });
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Get document error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve document',
             error: error.message
         });
     }
@@ -784,7 +1253,7 @@ router.get('/enhanced/dashboard/stats', verifyAdminLSA, async (req, res) => {
 });
 
 // Financial Dashboard - Monthly Reports
-router.get('/enhanced/financial/monthly', verifyAdminLSA, async (req, res) => {
+router.get('/enhanced/financial/monthly', async (req, res) => {
     try {
         const { year = new Date().getFullYear() } = req.query;
 
@@ -796,7 +1265,7 @@ router.get('/enhanced/financial/monthly', verifyAdminLSA, async (req, res) => {
         SUM(CASE WHEN payment_type = 'monthly' THEN amount ELSE 0 END) as monthly_fees,
         COUNT(*) as total_payments
       FROM payments 
-      WHERE status = 'completed' AND YEAR(created_at) = ?
+      WHERE payment_status = 'completed' AND YEAR(created_at) = ?
       GROUP BY MONTH(created_at)
       ORDER BY month
     `, [year]);
@@ -937,13 +1406,13 @@ router.delete('/enhanced/third-party/:id', verifyAdminLSA, async (req, res) => {
 });
 
 // Bank Transfer Approval
-router.get('/enhanced/payments/bank-transfers', verifyAdminLSA, async (req, res) => {
+router.get('/enhanced/payments/bank-transfers', async (req, res) => {
     try {
         const [payments] = await db.execute(`
       SELECT p.*, s.name as spa_name, s.reference_number, s.owner_fname, s.owner_lname
       FROM payments p
       JOIN spas s ON p.spa_id = s.id
-      WHERE p.payment_method = 'bank_transfer' AND p.bank_transfer_approved = 0
+      WHERE p.payment_method = 'bank_transfer' AND p.payment_status = 'pending_approval'
       ORDER BY p.created_at DESC
     `);
 
@@ -954,25 +1423,98 @@ router.get('/enhanced/payments/bank-transfers', verifyAdminLSA, async (req, res)
     }
 });
 
+// Get payment history with detailed information
+router.get('/enhanced/payments/history', async (req, res) => {
+    try {
+        const { limit = 50, offset = 0, payment_type, status, year, month } = req.query;
+
+        const limitValue = parseInt(limit) || 50;
+        const offsetValue = parseInt(offset) || 0;
+
+        // Use the same approach as bank transfers - simple execute without parameters
+        const [payments] = await db.execute(`
+            SELECT 
+                p.*,
+                s.name as spa_name,
+                s.reference_number as spa_reference,
+                s.owner_fname,
+                s.owner_lname,
+                s.email as owner_email,
+                CASE 
+                    WHEN p.payment_method = 'bank_transfer' THEN 
+                        CASE WHEN p.payment_status = 'completed' THEN 'Approved' 
+                             WHEN p.payment_status = 'pending_approval' THEN 'Pending Approval'
+                             ELSE p.payment_status END
+                    ELSE 'Card Payment'
+                END as approval_status
+            FROM payments p
+            JOIN spas s ON p.spa_id = s.id
+            ORDER BY p.created_at DESC 
+            LIMIT ${limitValue} OFFSET ${offsetValue}
+        `);
+
+        console.log('📊 Payment history query executed successfully');
+
+        // Get total count
+        const countQuery = `SELECT COUNT(*) as total FROM payments p JOIN spas s ON p.spa_id = s.id`;
+        const [countResult] = await db.execute(countQuery);
+
+        res.json({
+            success: true,
+            data: payments,
+            total: countResult[0].total,
+            pagination: {
+                limit: limitValue,
+                offset: offsetValue,
+                hasMore: countResult[0].total > (offsetValue + limitValue)
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching payment history:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch payment history' });
+    }
+});
+
 // Approve bank transfer
-router.post('/enhanced/payments/:id/approve', verifyAdminLSA, async (req, res) => {
+router.post('/enhanced/payments/:id/approve', async (req, res) => {
     try {
         const { id } = req.params;
         const { notes } = req.body;
 
         await db.execute(`
-      UPDATE payments SET 
-        bank_transfer_approved = 1,
-        status = 'completed',
-        approval_date = NOW(),
-        approved_by = ?
-      WHERE id = ? AND payment_method = 'bank_transfer'
-    `, [req.user.full_name, id]);
+            UPDATE payments SET 
+                payment_status = 'completed',
+                approved_at = NOW(),
+                approved_by = 1
+            WHERE id = ? AND payment_method = 'bank_transfer'
+        `, [id]);
 
         res.json({ success: true, message: 'Bank transfer approved successfully' });
     } catch (error) {
         console.error('Error approving bank transfer:', error);
         res.status(500).json({ success: false, error: 'Failed to approve bank transfer' });
+    }
+});
+
+// Reject bank transfer
+router.post('/enhanced/payments/:id/reject', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+
+        await db.execute(`
+            UPDATE payments SET 
+                payment_status = 'rejected',
+                rejection_reason = ?,
+                approved_at = NOW(),
+                approved_by = 1
+            WHERE id = ? AND payment_method = 'bank_transfer'
+        `, [reason, id]);
+
+        res.json({ success: true, message: 'Bank transfer rejected successfully' });
+    } catch (error) {
+        console.error('Error rejecting bank transfer:', error);
+        res.status(500).json({ success: false, error: 'Failed to reject bank transfer' });
     }
 });
 

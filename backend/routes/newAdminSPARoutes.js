@@ -5,6 +5,44 @@ const ActivityLogModel = require('../models/ActivityLogModel');
 const db = require('../config/database');
 const multer = require('multer');
 const path = require('path');
+const jwt = require('jsonwebtoken');
+
+// Authentication middleware for AdminSPA
+const authenticateAdminSPA = async (req, res, next) => {
+    try {
+        console.log('🔒 Authentication attempt for:', req.url);
+        console.log('� All headers received:', Object.keys(req.headers).join(', '));
+        console.log('🔑 Authorization header:', req.headers.authorization ? `Present (${req.headers.authorization.substring(0, 20)}...)` : 'MISSING');
+        console.log('�📝 Headers summary:', req.headers.authorization ? 'Token present' : 'No token');
+
+        const token = req.header('Authorization')?.replace('Bearer ', '');
+        if (!token) {
+            console.log('❌ No token provided');
+            return res.status(401).json({ success: false, error: 'No token provided' });
+        }
+
+        console.log('🔑 Token found, verifying...');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+        console.log('✅ Token decoded for user ID:', decoded.id);
+
+        const [user] = await db.execute(
+            'SELECT * FROM admin_users WHERE id = ? AND role = "admin_spa" AND is_active = true',
+            [decoded.id]
+        );
+
+        if (user.length === 0) {
+            console.log('❌ User not found or inactive');
+            return res.status(401).json({ success: false, error: 'Invalid token' });
+        }
+
+        console.log('✅ User authenticated:', user[0].username, 'spa_id:', user[0].spa_id);
+        req.user = user[0];
+        next();
+    } catch (error) {
+        console.log('❌ Authentication error:', error.message);
+        return res.status(401).json({ success: false, error: 'Invalid token' });
+    }
+};
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -34,10 +72,12 @@ const upload = multer({
 });
 
 // Get dynamic dashboard stats (Step 01)
-router.get('/dashboard-stats', async (req, res) => {
+router.get('/dashboard-stats', authenticateAdminSPA, async (req, res) => {
     try {
-        // For demo purposes, using spa_id = 1. In production, get from JWT token or session
-        const spaId = 1;
+        // Get spa_id from authenticated user
+        const spaId = req.user.spa_id;
+
+        console.log(`🔍 Dashboard stats requested for SPA ID: ${spaId}`);
 
         // Get approved therapists count
         const [approvedResult] = await db.execute(
@@ -51,11 +91,14 @@ router.get('/dashboard-stats', async (req, res) => {
             [spaId, 'pending']
         );
 
-        res.json({
+        const stats = {
             success: true,
             approved_therapists: approvedResult[0].count,
             pending_therapists: pendingResult[0].count
-        });
+        };
+
+        console.log(`📊 Dashboard stats for SPA ${spaId}:`, stats);
+        res.json(stats);
 
     } catch (error) {
         console.error('Dashboard stats error:', error);
@@ -69,10 +112,12 @@ router.get('/dashboard-stats', async (req, res) => {
 });
 
 // Get recent activity for today and yesterday (Step 01)
-router.get('/recent-activity', async (req, res) => {
+router.get('/recent-activity', authenticateAdminSPA, async (req, res) => {
     try {
-        // For demo purposes, using spa_id = 1. In production, get from JWT token or session
-        const spaId = 1;
+        // Get spa_id from authenticated user
+        const spaId = req.user.spa_id;
+
+        console.log(`🔍 Recent activity requested for SPA ID: ${spaId}`);
 
         // Get today and yesterday's dates
         const today = new Date();
@@ -93,6 +138,7 @@ router.get('/recent-activity', async (req, res) => {
             LIMIT 10
         `, [spaId, yesterdayStr]);
 
+        console.log(`📝 Recent activities for SPA ${spaId}:`, activities.length, 'records found');
         res.json(activities);
 
     } catch (error) {
@@ -106,10 +152,10 @@ router.get('/recent-activity', async (req, res) => {
 });
 
 // Process payment - Enhanced (Step 02)
-router.post('/process-payment', upload.single('slip'), async (req, res) => {
+router.post('/process-payment', authenticateAdminSPA, upload.single('slip'), async (req, res) => {
     try {
-        // For demo purposes, using spa_id = 1. In production, get from JWT token or session
-        const spaId = 1;
+        // Get spa_id from authenticated user
+        const spaId = req.user.spa_id;
         const { type, amount, method, planId } = req.body;
 
         // Validate required fields
@@ -191,10 +237,12 @@ router.post('/process-payment', upload.single('slip'), async (req, res) => {
 });
 
 // Get notification history (Step 04)
-router.get('/notification-history', async (req, res) => {
+router.get('/notification-history', authenticateAdminSPA, async (req, res) => {
     try {
-        // For demo purposes, using spa_id = 1. In production, get from JWT token or session
-        const spaId = 1;
+        // Get spa_id from authenticated user
+        const spaId = req.user.spa_id;
+
+        console.log(`🔍 Notification history requested for SPA ID: ${spaId}`);
 
         // Get approved and rejected therapist history with dates
         const [history] = await db.execute(`
@@ -266,9 +314,21 @@ router.get('/dashboard/:spaId', async (req, res) => {
 });
 
 // Get therapists for a specific spa
-router.get('/spas/:spaId/therapists', async (req, res) => {
+router.get('/spas/:spaId/therapists', authenticateAdminSPA, async (req, res) => {
     try {
-        const spaId = req.params.spaId;
+        const requestedSpaId = req.params.spaId;
+        const userSpaId = req.user.spa_id;
+
+        // Validate that the user is requesting data for their own spa
+        if (parseInt(requestedSpaId) !== parseInt(userSpaId)) {
+            return res.status(403).json({
+                success: false,
+                error: 'Access denied: You can only view therapists for your own spa'
+            });
+        }
+
+        const spaId = userSpaId;
+        console.log(`🔍 Therapists requested for SPA ID: ${spaId}`);
         const { status = 'all' } = req.query;
 
         let query = 'SELECT * FROM therapists WHERE spa_id = ?';

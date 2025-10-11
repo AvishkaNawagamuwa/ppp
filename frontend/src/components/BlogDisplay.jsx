@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FiChevronLeft, FiChevronRight, FiCalendar, FiArrowRight, 
-         FiFolder, FiActivity, FiUsers, FiBell, FiAlertCircle } from 'react-icons/fi';
+import {
+  FiChevronLeft, FiChevronRight, FiCalendar, FiArrowRight,
+  FiFolder, FiActivity, FiUsers, FiBell, FiAlertCircle
+} from 'react-icons/fi';
 import { Link } from "react-router-dom";
 
 const BlogDisplay = () => {
@@ -27,11 +29,11 @@ const BlogDisplay = () => {
     const fetchBlogs = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch('http://localhost:5000/api/blog');
+        const response = await fetch('http://localhost:3001/api/blog');
         if (response.ok) {
           const data = await response.json();
           setBlogs(data);
-          
+
           // Group blogs by category
           const grouped = data.reduce((acc, blog) => {
             if (!acc[blog.category]) {
@@ -40,9 +42,9 @@ const BlogDisplay = () => {
             acc[blog.category].push(blog);
             return acc;
           }, {});
-          
+
           setGroupedBlogs(grouped);
-          
+
           // Initialize media indices for each blog
           const indices = {};
           data.forEach(blog => {
@@ -102,7 +104,7 @@ const BlogDisplay = () => {
   // Function to get full URL for media files
   const getMediaUrl = (path) => {
     if (path.startsWith('http')) return path;
-    return `http://localhost:5000${path}`;
+    return `http://localhost:3001${path}`;
   };
 
   // Navigate media for a specific blog
@@ -110,7 +112,7 @@ const BlogDisplay = () => {
     setMediaIndices(prev => {
       const blog = blogs.find(b => b.id === blogId);
       if (!blog || !blog.media_paths) return prev;
-      
+
       return {
         ...prev,
         [blogId]: (prev[blogId] + 1) % blog.media_paths.length
@@ -122,7 +124,7 @@ const BlogDisplay = () => {
     setMediaIndices(prev => {
       const blog = blogs.find(b => b.id === blogId);
       if (!blog || !blog.media_paths) return prev;
-      
+
       return {
         ...prev,
         [blogId]: (prev[blogId] - 1 + blog.media_paths.length) % blog.media_paths.length
@@ -136,7 +138,7 @@ const BlogDisplay = () => {
     if (slideShowIntervals.current[blogId]) {
       clearInterval(slideShowIntervals.current[blogId]);
     }
-    
+
     // Set new interval
     slideShowIntervals.current[blogId] = setInterval(() => {
       nextMedia(blogId);
@@ -154,7 +156,7 @@ const BlogDisplay = () => {
   // Handle blog hover
   const handleBlogHover = (blogId, hasMultipleMedia) => {
     setHoveredBlogs(prev => ({ ...prev, [blogId]: true }));
-    
+
     // Start slideshow if blog has multiple media
     if (hasMultipleMedia) {
       startSlideshow(blogId);
@@ -164,7 +166,7 @@ const BlogDisplay = () => {
   // Handle blog leave
   const handleBlogLeave = (blogId) => {
     setHoveredBlogs(prev => ({ ...prev, [blogId]: false }));
-    
+
     // Stop slideshow
     stopSlideshow(blogId);
   };
@@ -203,11 +205,11 @@ const BlogDisplay = () => {
     }, [isHovered]);
 
     return (
-      <div 
+      <div
         className="relative max-w-8xl h-56 md:h-64 lg:h-72 bg-gray-100 overflow-hidden mb-4 group rounded-t-xl"
         onMouseEnter={() => handleBlogHover(blog.id, hasMultipleMedia)}
         onMouseLeave={() => handleBlogLeave(blog.id)}
-      > 
+      >
         {currentType === 'image' ? (
           <div className="w-full h-full overflow-hidden">
             <img
@@ -243,7 +245,7 @@ const BlogDisplay = () => {
             </div>
           </div>
         )}
-        
+
         {hasMultipleMedia && (
           <>
             <button
@@ -272,20 +274,20 @@ const BlogDisplay = () => {
                   key={index}
                   onClick={(e) => {
                     e.stopPropagation();
-                    setMediaIndices({...mediaIndices, [blog.id]: index});
+                    setMediaIndices({ ...mediaIndices, [blog.id]: index });
                     stopSlideshow(blog.id);
                   }}
                   className={`w-2 h-2 rounded-full transition-all duration-300 ${index === currentIndex ? 'bg-white scale-125' : 'bg-white/50'}`}
                 />
               ))}
             </div>
-            
+
             {/* Slideshow progress bar */}
             {isHovered && (
               <div className="absolute bottom-0 left-0 w-full h-1 bg-white/30">
-                <div 
+                <div
                   className="h-full bg-white/80 transition-all duration-100 linear"
-                  style={{ 
+                  style={{
                     width: `${(currentIndex / (blog.media_paths.length - 1)) * 100}%`,
                     animation: isHovered ? 'progressBar 4s linear' : 'none'
                   }}
@@ -336,7 +338,7 @@ const BlogDisplay = () => {
           }
         `}
       </style>
-      
+
       {/* Blog Content */}
       <div className="max-w-8xl mx-auto px-6 sm:px-12 py-10 md:py-16">
         {Object.keys(groupedBlogs).length === 0 ? (
@@ -352,8 +354,8 @@ const BlogDisplay = () => {
         ) : (
           <>
             {Object.entries(groupedBlogs).map(([category, categoryBlogs], index) => (
-              <section 
-                key={category} 
+              <section
+                key={category}
                 id={`section-${category}`}
                 ref={el => sectionRefs.current[category] = el}
                 className={`mb-16 last:mb-0 ${visibleSections[`section-${category}`] ? 'animate-fade-in-up' : 'opacity-0'}`}
@@ -366,34 +368,33 @@ const BlogDisplay = () => {
                   </h2>
                   <div className="h-1 w-80 bg-gradient-to-r from-[#D4AF37] to-[#BF9B30] mt-3 rounded-full"></div>
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                   {categoryBlogs.map((blog, blogIndex) => (
-                    <article 
-                      key={blog.id} 
-                      className={`bg-white overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 animate-fade-in-up ${
-                        !blog.media_paths || blog.media_paths.length === 0 ? 'pt-6' : ''
-                      }`}
+                    <article
+                      key={blog.id}
+                      className={`bg-white overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 animate-fade-in-up ${!blog.media_paths || blog.media_paths.length === 0 ? 'pt-6' : ''
+                        }`}
                       style={{ animationDelay: `${0.2 + blogIndex * 0.1}s` }}
                       onMouseEnter={() => handleBlogHover(blog.id, blog.media_paths && blog.media_paths.length > 1)}
                       onMouseLeave={() => handleBlogLeave(blog.id)}
                     >
                       <MediaDisplay blog={blog} />
-                      
+
                       <div className="p-6">
                         <div className="flex items-center text-sm text-gray-500 mb-3">
                           <FiCalendar className="mr-1.5" />
                           <span>{formatDate(blog.date)}</span>
                         </div>
-                        
+
                         <h3 className="text-xl font-semibold text-[#0A1428] mb-3 line-clamp-2">
                           {blog.title}
                         </h3>
-                        
+
                         <p className="text-gray-600 mb-4 line-clamp-3">
                           {blog.description}
                         </p>
-                        
+
                         <Link
                           to={`/blogs/${blog.id}`}
                           className="flex items-center text-[#D4AF37] font-medium hover:text-[#BF9B30] transition-colors group"

@@ -33,43 +33,65 @@ const ThirdPartyLogin = () => {
 
         setLoading(true);
         try {
-            const response = await axios.post('/api/third-party/login', credentials);
+            // Connect to the third_party_users table via API
+            const response = await axios.post('http://localhost:3001/api/third-party/login', {
+                username: credentials.username,
+                password: credentials.password
+            });
 
-            // Store the token
-            localStorage.setItem('thirdPartyToken', response.data.token);
-            localStorage.setItem('thirdPartyUser', JSON.stringify(response.data.user));
+            if (response.data.success !== false) {
+                // Store the token and user information
+                localStorage.setItem('thirdPartyToken', response.data.token);
+                localStorage.setItem('thirdPartyUser', JSON.stringify(response.data.user));
 
-            // Redirect to dashboard
-            window.location.href = '/third-party-dashboard';
+                Swal.fire({
+                    title: 'Login Successful',
+                    text: `Welcome ${response.data.user.fullName}!`,
+                    icon: 'success',
+                    confirmButtonColor: '#001F3F'
+                }).then(() => {
+                    // Redirect to dashboard
+                    window.location.href = '/third-party-dashboard';
+                });
+            }
 
         } catch (error) {
             console.error('Login failed:', error);
 
-            // Demo login - for development purposes
-            if (credentials.username && credentials.password) {
+            let errorMessage = 'Invalid username or password. Please check your credentials.';
+
+            if (error.response && error.response.data && error.response.data.error) {
+                errorMessage = error.response.data.error;
+            }
+
+            // If API fails, try demo mode for development
+            if (!error.response || error.code === 'ECONNREFUSED') {
+                console.warn('API not available, using demo mode');
                 localStorage.setItem('thirdPartyToken', 'demo-token-' + Date.now());
                 localStorage.setItem('thirdPartyUser', JSON.stringify({
                     username: credentials.username,
-                    role: 'Government Officer',
+                    fullName: 'Demo Government Officer',
+                    role: 'government_officer',
                     loginTime: new Date().toISOString()
                 }));
 
                 Swal.fire({
-                    title: 'Login Successful',
-                    text: 'Welcome to the Third Party Dashboard!',
-                    icon: 'success',
+                    title: 'Demo Login',
+                    text: 'Connected in demo mode. API server not available.',
+                    icon: 'info',
                     confirmButtonColor: '#001F3F'
                 }).then(() => {
                     window.location.href = '/third-party-dashboard';
                 });
-            } else {
-                Swal.fire({
-                    title: 'Login Failed',
-                    text: 'Invalid username or password. Please check your credentials.',
-                    icon: 'error',
-                    confirmButtonColor: '#001F3F'
-                });
+                return;
             }
+
+            Swal.fire({
+                title: 'Login Failed',
+                text: errorMessage,
+                icon: 'error',
+                confirmButtonColor: '#001F3F'
+            });
         } finally {
             setLoading(false);
         }
@@ -79,7 +101,19 @@ const ThirdPartyLogin = () => {
         <div className="min-h-screen bg-gradient-to-br from-[#001F3F] to-[#003366] flex items-center justify-center p-4">
             <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl overflow-hidden">
                 {/* Header */}
-                <div className="bg-[#001F3F] text-white p-8 text-center">
+                <div className="bg-[#001F3F] text-white p-8 text-center relative">
+                    {/* Back to Home Button */}
+                    <button
+                        onClick={() => window.location.href = '/'}
+                        className="absolute top-4 left-4 flex items-center text-[#FFD700] hover:text-white transition-colors duration-300 text-sm"
+                        type="button"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                        Back to Home
+                    </button>
+
                     <div className="mb-4">
                         <FiShield className="mx-auto h-16 w-16 text-[#FFD700]" />
                     </div>
@@ -176,6 +210,20 @@ const ThirdPartyLogin = () => {
                             <p className="font-medium mb-1">Demo Mode Instructions:</p>
                             <p>Enter any username and password to access the dashboard in demo mode.</p>
                         </div>
+                    </div>
+
+                    {/* Back to Home Link */}
+                    <div className="mt-6 text-center">
+                        <button
+                            onClick={() => window.location.href = '/'}
+                            className="inline-flex items-center text-[#001F3F] hover:text-[#FFD700] transition-colors duration-300 text-sm font-medium"
+                            type="button"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                            </svg>
+                            Back to Lanka Spa Association Homepage
+                        </button>
                     </div>
                 </div>
             </div>

@@ -48,7 +48,7 @@ const AddBlog = () => {
 
   const fetchBlogs = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/blog');
+      const response = await fetch('http://localhost:3001/api/blog');
       if (response.ok) {
         const data = await response.json();
         setBlogs(data);
@@ -62,7 +62,7 @@ const AddBlog = () => {
 
   const fetchBlogMedia = async (blogId) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/blog/${blogId}`);
+      const response = await fetch(`http://localhost:3001/api/blog/${blogId}`);
       if (response.ok) {
         const blog = await response.json();
         return blog.media || [];
@@ -201,8 +201,8 @@ const AddBlog = () => {
       });
 
       const url = editingBlog
-        ? `http://localhost:5000/api/blog/${editingBlog.id}`
-        : 'http://localhost:5000/api/blog';
+        ? `http://localhost:3001/api/blog/${editingBlog.id}`
+        : 'http://localhost:3001/api/blog';
 
       const method = editingBlog ? 'PUT' : 'POST';
 
@@ -294,7 +294,7 @@ const AddBlog = () => {
   const handleDelete = async (blogId) => {
     if (window.confirm('Are you sure you want to delete this blog post?')) {
       try {
-        const response = await fetch(`http://localhost:5000/api/blog/${blogId}`, {
+        const response = await fetch(`http://localhost:3001/api/blog/${blogId}`, {
           method: 'DELETE',
         });
 
@@ -365,7 +365,7 @@ const AddBlog = () => {
   // Function to get full URL for media files
   const getMediaUrl = (path) => {
     if (path.startsWith('http')) return path;
-    return `http://localhost:5000${path}`;
+    return `http://localhost:3001${path}`;
   };
 
   // Media slider navigation
@@ -559,8 +559,8 @@ const AddBlog = () => {
                 <div>
                   <div
                     className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all duration-200 outline-none ${isDragging
-                        ? 'border-[#0A1428] bg-gray-100'
-                        : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                      ? 'border-[#0A1428] bg-gray-100'
+                      : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
                       } focus:ring-2 focus:ring-[#0A1428] focus:ring-opacity-50`}
                     onDrop={handleDrop}
                     onDragOver={handleDragOver}

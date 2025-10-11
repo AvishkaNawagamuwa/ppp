@@ -15,12 +15,14 @@ export const SpaContextProvider = ({ children }) => {
         subscriptionStatus: 'inactive', // 'active', 'inactive', 'expired'
         subscriptionPlan: null, // 'monthly', 'quarterly', 'half-yearly', 'annual'
         subscriptionExpiry: null,
-        spaName: 'Serenity Wellness Spa',
-        ownerName: 'Priya Perera',
+        spaName: 'Loading...',
+        ownerName: 'Loading...',
         therapistCount: 0,
         pendingRequests: 0,
         totalRevenue: 0,
-        notifications: []
+        notifications: [],
+        spaId: null,
+        loading: true
     });
 
     const updateSubscription = (plan, status = 'active') => {
@@ -57,26 +59,60 @@ export const SpaContextProvider = ({ children }) => {
         setSpaData(prev => ({ ...prev, pendingRequests: count }));
     };
 
-    // Simulate fetching data on mount
+    // Fetch real spa data based on logged-in user
     useEffect(() => {
-        // In real app, fetch from API
         const fetchSpaData = async () => {
             try {
-                // Simulate API call
-                setTimeout(() => {
+                // Get user data from localStorage (set during login)
+                const userData = localStorage.getItem('user');
+                if (!userData) {
+                    console.error('No user data found in localStorage');
+                    setSpaData(prev => ({ ...prev, loading: false }));
+                    return;
+                }
+
+                const user = JSON.parse(userData);
+                console.log('Loading spa data for user:', user);
+
+                if (!user.spa_id) {
+                    console.error('No spa_id found in user data');
+                    setSpaData(prev => ({ ...prev, loading: false }));
+                    return;
+                }
+
+                // Fetch spa information from backend
+                const response = await fetch(`http://localhost:3001/api/spa/profile/${user.spa_id}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const spaInfo = await response.json();
+                    console.log('Spa data loaded:', spaInfo);
+
                     setSpaData(prev => ({
                         ...prev,
-                        therapistCount: 8,
-                        pendingRequests: 2,
-                        totalRevenue: 450000,
+                        spaId: user.spa_id,
+                        spaName: spaInfo.data.name || 'Unknown Spa',
+                        ownerName: `${spaInfo.data.owner_fname || ''} ${spaInfo.data.owner_lname || ''}`.trim() || 'Unknown Owner',
+                        therapistCount: 8, // TODO: Fetch real count
+                        pendingRequests: 2, // TODO: Fetch real count
+                        totalRevenue: 450000, // TODO: Fetch real revenue
                         notifications: [
-                            { id: 1, type: 'success', message: 'New therapist approval request', time: '2 hours ago' },
-                            { id: 2, type: 'info', message: 'Monthly report is ready', time: '1 day ago' }
-                        ]
+                            { id: 1, type: 'success', message: 'Welcome to your spa dashboard!', time: 'Just now' }
+                        ],
+                        loading: false
                     }));
-                }, 1000);
+                } else {
+                    console.error('Failed to fetch spa data:', response.status);
+                    setSpaData(prev => ({ ...prev, loading: false }));
+                }
             } catch (error) {
                 console.error('Failed to fetch spa data:', error);
+                setSpaData(prev => ({ ...prev, loading: false }));
             }
         };
 

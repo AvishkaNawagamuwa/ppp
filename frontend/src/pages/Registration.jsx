@@ -783,16 +783,17 @@ const PaymentStep = ({ onBack, onPaymentSuccess, userDetails }) => {
       const result = await response.json();
 
       if (result.success) {
+        // Store registration data for success page
+        localStorage.setItem('recentRegistration', JSON.stringify(result.data));
+
         Swal.fire({
-          title: 'Registration Submitted!',
-          text: paymentMethod === 'bank_transfer'
-            ? 'Your registration has been submitted with bank transfer slip. We will verify your payment and activate your account within 24-48 hours.'
-            : 'Your registration has been completed successfully!',
+          title: 'Registration Completed!',
+          text: result.message || 'Your registration has been completed successfully! Your login credentials are ready.',
           icon: 'success',
           confirmButtonColor: '#0A1428',
-          confirmButtonText: 'Continue'
+          confirmButtonText: 'View Credentials & Continue'
         }).then(() => {
-          // Redirect to success page
+          // Redirect to success page with credentials
           window.location.href = '/registration-success';
         });
       } else {
@@ -1244,8 +1245,8 @@ const PaymentStep = ({ onBack, onPaymentSuccess, userDetails }) => {
             type="submit"
             disabled={isProcessing || (paymentMethod === 'bank_transfer' && !bankSlip)}
             className={`px-8 py-3 rounded-xl font-semibold transition-all duration-300 hover:shadow-lg flex items-center ${isProcessing || (paymentMethod === 'bank_transfer' && !bankSlip)
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-gradient-to-r from-gold-light to-gold text-primary-dark hover:shadow-lg'
+              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              : 'bg-gradient-to-r from-gold-light to-gold text-primary-dark hover:shadow-lg'
               }`}
           >
             {isProcessing ? (

@@ -24,6 +24,12 @@ const enhancedAdminLSARoutes = require('./routes/enhancedAdminLSARoutes');
 const newAdminSPARoutes = require('./routes/newAdminSPARoutes');
 const enhancedThirdPartyRoutes = require('./routes/enhancedThirdPartyRoutes');
 
+// Import auth routes
+const authRoutes = require('./routes/authRoutes');
+
+// Import blog routes
+const blogRoutes = require('./routes/blogRoutes');
+
 // Import database connection
 const db = require('./config/database');
 
@@ -35,7 +41,7 @@ const io = new Server(server, {
     methods: ["GET", "POST"]
   }
 });
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3001;
 
 // Test database connection
 db.getConnection()
@@ -67,6 +73,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/gallery', express.static(path.join(__dirname, 'gallery')));
 
 // API Routes
+app.use('/api/auth', authRoutes); // Authentication routes
+app.use('/api', blogRoutes); // Blog routes
 app.use('/api', uploadRoutes);
 app.use('/api/spa', spaRoutes);
 app.use('/api/lsa', adminLSARoutes);
@@ -134,6 +142,7 @@ io.on('connection', (socket) => {
 // Make io available to routes
 app.set('io', io);
 
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT} with Socket.io enabled`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on http://localhost:${PORT} with Socket.io enabled`);
+  console.log(`🔗 Test the server at: http://localhost:${PORT}/api/auth/test`);
 });

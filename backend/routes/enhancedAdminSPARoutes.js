@@ -5,6 +5,7 @@ const ActivityLogModel = require('../models/ActivityLogModel');
 const db = require('../config/database');
 const multer = require('multer');
 const path = require('path');
+const jwt = require('jsonwebtoken');
 
 // Middleware to verify AdminSPA authentication
 const verifyAdminSPA = async (req, res, next) => {
@@ -14,7 +15,7 @@ const verifyAdminSPA = async (req, res, next) => {
             return res.status(401).json({ success: false, error: 'Access denied. No token provided.' });
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
 
         // Verify user exists and is AdminSPA
         const [user] = await db.execute(

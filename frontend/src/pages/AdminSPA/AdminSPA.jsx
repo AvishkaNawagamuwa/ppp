@@ -1,4 +1,5 @@
 ﻿import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import io from 'socket.io-client';
 import {
@@ -308,8 +309,10 @@ const AddTherapist = () => {
             formDataToSend.append('nic', formData.nic);
             formDataToSend.append('phone', formData.phone);
 
-            // Get spa_id from localStorage or use default
-            const spaId = localStorage.getItem('spa_id') || '1';
+            // Get spa_id from logged-in user data
+            const userData = localStorage.getItem('user');
+            const user = userData ? JSON.parse(userData) : null;
+            const spaId = user?.spa_id || '1';
             formDataToSend.append('spa_id', spaId);
             formDataToSend.append('name', `${formData.firstName} ${formData.lastName}`);
             formDataToSend.append('email', `${formData.firstName.toLowerCase()}.${formData.lastName.toLowerCase()}@spa.com`);
@@ -902,19 +905,88 @@ const ViewTherapists = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // Get spa_id from localStorage or use default
-    const spaId = localStorage.getItem('spa_id') || '1';
+    // Get spa_id from logged-in user data  
+    const [spaId, setSpaId] = useState(null);
+
+    // Initialize spa_id when component mounts
+    useEffect(() => {
+        const userData = localStorage.getItem('user');
+        console.log('📱 Raw user data from localStorage:', userData);
+
+        if (userData) {
+            try {
+                const user = JSON.parse(userData);
+                console.log('🎯 Parsed user object:', user);
+                console.log('🎯 Setting spa_id for user:', user.username, 'spa_id:', user.spa_id);
+                setSpaId(user.spa_id ? String(user.spa_id) : null);
+            } catch (error) {
+                console.error('Error parsing user data:', error);
+                setSpaId(null);
+            }
+        } else {
+            console.error('❌ No user data found in localStorage');
+        }
+    }, []);
 
     // Fetch therapists from database
     const fetchTherapists = async (status = 'all') => {
+        const token = localStorage.getItem('token');
+
+        // Enhanced token debugging
+        console.log('🔍 Token debugging:', {
+            tokenExists: !!token,
+            tokenValue: token,
+            tokenType: typeof token,
+            tokenLength: token?.length,
+            isNull: token === null,
+            isUndefined: token === undefined,
+            isEmpty: token === '',
+            isStringNull: token === 'null'
+        });
+
+        if (!token || token === 'null' || token === 'undefined') {
+            console.error('🔑 Invalid token for therapists request:', token);
+            setError('Authentication required. Please log in again.');
+            setTherapists([]);
+            return;
+        }
+
+        if (!spaId) {
+            console.error('🏢 No spa_id available for therapists request');
+            setError('Spa information not available. Please refresh the page.');
+            setTherapists([]);
+            return;
+        }
+
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch(`/api/admin-spa-new/spas/${spaId}/therapists?status=${status}`);
+            console.log(`🔍 Fetching therapists for SPA ${spaId} with status: ${status}`);
+            console.log(`🔑 Frontend token check:`, {
+                tokenExists: !!token,
+                tokenLength: token?.length,
+                tokenStart: token?.substring(0, 15) + '...'
+            });
+
+            const response = await fetch(`/api/admin-spa-new/spas/${spaId}/therapists?status=${status}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            console.log(`📡 Response status: ${response.status} ${response.statusText}`);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
             const data = await response.json();
 
             if (data.success) {
                 setTherapists(data.therapists || []);
+                console.log(`📋 Loaded ${data.therapists?.length || 0} therapists for SPA ${spaId}`);
             } else {
                 setError('Failed to fetch therapists');
                 setTherapists([]);
@@ -928,9 +1000,21 @@ const ViewTherapists = () => {
         }
     };
 
-    // Load therapists when component mounts or tab changes
+    // Load therapists when component mounts or tab changes (with debounce)
     useEffect(() => {
-        fetchTherapists(activeTab === 'all' ? 'all' : activeTab);
+        const token = localStorage.getItem('token');
+        if (token && spaId) {
+            console.log(`🔄 Loading therapists for tab: ${activeTab}, spa: ${spaId}`);
+
+            // Add small delay to prevent race conditions
+            const timeoutId = setTimeout(() => {
+                fetchTherapists(activeTab === 'all' ? 'all' : activeTab);
+            }, 100);
+
+            return () => clearTimeout(timeoutId);
+        } else {
+            console.log(`⚠️ Skipping therapist load - token: ${!!token}, spaId: ${spaId}`);
+        }
     }, [activeTab, spaId]);
 
     // Map database status to display status
@@ -1215,15 +1299,59 @@ const ResignTerminate = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // Get spa_id from localStorage or use default
-    const spaId = localStorage.getItem('spa_id') || '1';
+    // Get spa_id from logged-in user data
+    const getUserSpaId = () => {
+        const userData = localStorage.getItem('user');
+        if (userData) {
+            try {
+                const user = JSON.parse(userData);
+                return user.spa_id || '1';
+            } catch (error) {
+                console.error('Error parsing user data:', error);
+                return '1';
+            }
+        }
+        return '1';
+    };
+    const spaId = getUserSpaId();
 
     // Fetch approved therapists from database
     const fetchApprovedTherapists = async () => {
+        const token = localStorage.getItem('token');
+
+        if (!token || token === 'null' || token === 'undefined') {
+            console.error('🔑 Invalid token for approved therapists request:', token);
+            setError('Authentication required. Please log in again.');
+            setTherapists([]);
+            return;
+        }
+
+        if (!spaId) {
+            console.error('🏢 No spa_id available for approved therapists request');
+            setError('Spa information not available. Please refresh the page.');
+            setTherapists([]);
+            return;
+        }
+
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch(`/api/admin-spa-new/spas/${spaId}/therapists?status=approved`);
+            console.log(`🔍 Fetching approved therapists for SPA ${spaId}`);
+            console.log(`🔑 Frontend token check:`, {
+                tokenExists: !!token,
+                tokenLength: token?.length,
+                tokenStart: token?.substring(0, 15) + '...'
+            });
+
+            const response = await fetch(`/api/admin-spa-new/spas/${spaId}/therapists?status=approved`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            console.log(`📡 Response status: ${response.status} ${response.statusText}`);
             const data = await response.json();
 
             if (data.success) {
@@ -1538,16 +1666,36 @@ const QuickProfile = () => {
     const handleLogout = () => {
         Swal.fire({
             title: 'Confirm Logout',
-            text: 'Are you sure you want to logout?',
+            text: 'Are you sure you want to logout from your SPA Dashboard?',
             icon: 'question',
             showCancelButton: true,
             confirmButtonColor: '#0A1428',
-            cancelButtonColor: '#d33',
-            confirmButtonText: 'Yes, Logout'
+            cancelButtonColor: '#6B7280',
+            confirmButtonText: 'Yes, Logout',
+            cancelButtonText: 'Cancel',
+            reverseButtons: true
         }).then((result) => {
             if (result.isConfirmed) {
-                // Implement logout logic here
-                console.log('Logging out...');
+                // Clear authentication data
+                localStorage.removeItem('userData');
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('userRole');
+                localStorage.removeItem('spaId');
+
+                // Show success message
+                Swal.fire({
+                    title: 'Logged Out Successfully',
+                    text: 'You have been logged out from SPA Dashboard',
+                    icon: 'success',
+                    confirmButtonColor: '#0A1428',
+                    timer: 1500,
+                    showConfirmButton: false
+                });
+
+                // Navigate to home page
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 1000);
             }
         });
     };
@@ -1622,6 +1770,7 @@ const QuickProfile = () => {
 };
 
 const AdminSPA = () => {
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('dashboard');
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -1635,7 +1784,7 @@ const AdminSPA = () => {
     // Initialize Socket.io connection
     useEffect(() => {
         const spaId = localStorage.getItem('spaId') || '1'; // Get from localStorage or default
-        const newSocket = io('http://localhost:5000');
+        const newSocket = io('http://localhost:3001');
 
         newSocket.emit('join_spa', spaId);
 
@@ -1743,8 +1892,45 @@ const AdminSPA = () => {
     };
 
     const handleLogout = () => {
-        console.log('Logging out...');
-        // Implement logout logic
+        Swal.fire({
+            title: 'Confirm Logout',
+            text: 'Are you sure you want to logout from AdminSPA Dashboard?',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#0A1428',
+            cancelButtonColor: '#6B7280',
+            confirmButtonText: 'Yes, Logout',
+            cancelButtonText: 'Cancel',
+            reverseButtons: true
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Clear authentication data
+                localStorage.removeItem('userData');
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('userRole');
+                localStorage.removeItem('spaId');
+
+                // Disconnect socket if connected
+                if (socket) {
+                    socket.disconnect();
+                }
+
+                // Show success message
+                Swal.fire({
+                    title: 'Logged Out Successfully',
+                    text: 'You have been logged out from AdminSPA Dashboard',
+                    icon: 'success',
+                    confirmButtonColor: '#0A1428',
+                    timer: 1500,
+                    showConfirmButton: false
+                });
+
+                // Navigate to home page
+                setTimeout(() => {
+                    navigate('/');
+                }, 1000);
+            }
+        });
     };
 
     const toggleSidebar = () => {

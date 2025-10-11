@@ -14,7 +14,12 @@ const NotificationHistory = () => {
     const fetchNotificationHistory = async () => {
         try {
             setLoading(true);
-            const response = await axios.get('/api/admin-spa-new/notification-history');
+            const token = localStorage.getItem('token');
+            const response = await axios.get('/api/admin-spa-new/notification-history', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
 
             // Ensure we always get an array
             const historyData = Array.isArray(response.data) ? response.data :
@@ -91,8 +96,8 @@ const NotificationHistory = () => {
                     <button
                         onClick={() => setFilter('all')}
                         className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${filter === 'all'
-                                ? 'bg-white text-[#001F3F] shadow-sm'
-                                : 'text-gray-600 hover:text-gray-900'
+                            ? 'bg-white text-[#001F3F] shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
                             }`}
                     >
                         All ({Array.isArray(history) ? history.filter(h => ['approved', 'rejected'].includes(h.status)).length : 0})
@@ -100,8 +105,8 @@ const NotificationHistory = () => {
                     <button
                         onClick={() => setFilter('approved')}
                         className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${filter === 'approved'
-                                ? 'bg-white text-[#001F3F] shadow-sm'
-                                : 'text-gray-600 hover:text-gray-900'
+                            ? 'bg-white text-[#001F3F] shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
                             }`}
                     >
                         Approved ({Array.isArray(history) ? history.filter(h => h.status === 'approved').length : 0})
@@ -109,8 +114,8 @@ const NotificationHistory = () => {
                     <button
                         onClick={() => setFilter('rejected')}
                         className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${filter === 'rejected'
-                                ? 'bg-white text-[#001F3F] shadow-sm'
-                                : 'text-gray-600 hover:text-gray-900'
+                            ? 'bg-white text-[#001F3F] shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
                             }`}
                     >
                         Rejected ({Array.isArray(history) ? history.filter(h => h.status === 'rejected').length : 0})

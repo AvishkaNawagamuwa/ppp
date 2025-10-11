@@ -383,4 +383,58 @@ router.use((error, req, res, next) => {
     });
 });
 
+// ==================== SPA PROFILE ROUTE ====================
+
+/**
+ * @route   GET /api/spa/profile/:spa_id
+ * @desc    Get spa profile information by spa_id
+ * @access  Private (requires authentication)
+ */
+router.get('/profile/:spa_id', asyncHandler(async (req, res) => {
+    try {
+        const { spa_id } = req.params;
+
+        console.log('Fetching spa profile for ID:', spa_id);
+
+        // For now, let's use direct database query since we're not sure about the SpaModel
+        const db = require('../config/database');
+        const connection = await db.getConnection();
+
+        try {
+            // Query the spas table for the specific spa
+            const [rows] = await connection.execute(
+                'SELECT id, name, owner_fname, owner_lname, email, phone, address, status, reference_number FROM spas WHERE id = ?',
+                [spa_id]
+            );
+
+            if (rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Spa not found'
+                });
+            }
+
+            const spa = rows[0];
+            console.log('Spa profile found:', spa);
+
+            res.json({
+                success: true,
+                data: spa,
+                message: 'Spa profile retrieved successfully'
+            });
+
+        } finally {
+            connection.release();
+        }
+
+    } catch (error) {
+        console.error('Error fetching spa profile:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch spa profile',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
+    }
+}));
+
 module.exports = router;

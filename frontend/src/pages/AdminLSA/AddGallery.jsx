@@ -17,7 +17,7 @@ const AddGallery = () => {
   const fetchUploadedImages = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('http://localhost:5000/api/gallery');
+      const response = await axios.get('http://localhost:3001/api/gallery');
       setUploadedImages(response.data.images || []);
     } catch (error) {
       console.error('Error fetching images:', error);
@@ -29,16 +29,16 @@ const AddGallery = () => {
 
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files);
-    const validFiles = files.filter(file => 
-      file.type === 'image/jpeg' || 
-      file.type === 'image/png' || 
+    const validFiles = files.filter(file =>
+      file.type === 'image/jpeg' ||
+      file.type === 'image/png' ||
       file.type === 'image/webp'
     );
-    
+
     if (validFiles.length !== files.length) {
       setMessage({ text: 'Only JPG, PNG, and WebP files are allowed', type: 'error' });
     }
-    
+
     setImages(validFiles);
   };
 
@@ -57,7 +57,7 @@ const AddGallery = () => {
         formData.append('galleryImages', image);
       });
 
-      const response = await axios.post('http://localhost:5000/api/backend/gallery', formData, {
+      const response = await axios.post('http://localhost:3001/api/backend/gallery', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -67,12 +67,12 @@ const AddGallery = () => {
         setMessage({ text: 'Images uploaded successfully!', type: 'success' });
         setImages([]);
         document.getElementById('gallery-upload').value = '';
-        
+
         // Refresh the gallery after upload
         fetchUploadedImages();
         // Switch to manage tab after successful upload
         setActiveTab('manage');
-        
+
         setTimeout(() => {
           setMessage({ text: '', type: '' });
         }, 5000);
@@ -93,13 +93,13 @@ const AddGallery = () => {
     }
 
     try {
-      const response = await axios.delete(`http://localhost:5000/api/gallery/${filename}`);
-      
+      const response = await axios.delete(`http://localhost:3001/api/gallery/${filename}`);
+
       if (response.data.success) {
         setMessage({ text: 'Image deleted successfully!', type: 'success' });
         // Refresh the gallery
         fetchUploadedImages();
-        
+
         setTimeout(() => {
           setMessage({ text: '', type: '' });
         }, 3000);
@@ -122,7 +122,7 @@ const AddGallery = () => {
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-md p-6">
         <h1 className="text-2xl font-bold text-[#0A1428] mb-6">Gallery Management</h1>
-        
+
         {/* Tab Navigation */}
         <div className="flex border-b border-gray-200 mb-6">
           <button
@@ -247,7 +247,7 @@ const AddGallery = () => {
                   {uploadedImages.map((image, index) => (
                     <div key={index} className="relative group bg-gray-100 rounded-lg overflow-hidden">
                       <img
-                        src={`http://localhost:5000/gallery/${image}`}
+                        src={`http://localhost:3001/gallery/${image}`}
                         alt={`Gallery ${index + 1}`}
                         className="w-full h-48 object-cover"
                         onError={(e) => {

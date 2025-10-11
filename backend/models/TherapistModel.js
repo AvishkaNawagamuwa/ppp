@@ -47,10 +47,10 @@ class TherapistModel {
                 `New therapist request: ${fname} ${lname}`, 'spa', spaId, `${fname} ${lname}`);
 
             // Create notification for LSA
-            await this.createNotification(connection, 'lsa', null,
+            await this.createNotification(connection, 'admin_lsa', null,
                 'New Therapist Request',
                 `New therapist registration request from spa: ${fname} ${lname}`,
-                'info', 'therapist', therapistId
+                'therapist_application', 'therapist', therapistId
             );
 
             await connection.commit();
@@ -150,10 +150,10 @@ class TherapistModel {
             // Update therapist status
             const updateTherapistQuery = `
                 UPDATE therapists 
-                SET status = 'approved', reviewed_at = NOW(), reviewed_by = ?
+                SET status = 'approved', approved_date = NOW()
                 WHERE id = ?
             `;
-            await connection.execute(updateTherapistQuery, [reviewedBy, therapistId]);
+            await connection.execute(updateTherapistQuery, [therapistId]);
 
             // Update request status
             const updateRequestQuery = `
@@ -166,16 +166,17 @@ class TherapistModel {
 
             // Get therapist details for notifications
             const therapist = await this.getTherapistById(therapistId);
+            const therapistName = therapist.name || `${therapist.first_name || ''} ${therapist.last_name || ''}`.trim();
 
             // Log activity
             await this.logActivity(connection, 'therapist', therapistId, 'approved',
-                `Therapist approved: ${therapist.name}`, 'lsa', null, reviewedBy);
+                `Therapist approved: ${therapistName}`, 'lsa', null, reviewedBy);
 
             // Create notification for spa
-            await this.createNotification(connection, 'spa', therapist.spa_id,
+            await this.createNotification(connection, 'admin_spa', therapist.spa_id,
                 'Therapist Approved',
-                `Your therapist ${therapist.name} has been approved!`,
-                'success', 'therapist', therapistId
+                `Your therapist ${therapistName} has been approved!`,
+                'therapist_application', 'therapist', therapistId
             );
 
             await connection.commit();
@@ -196,10 +197,10 @@ class TherapistModel {
             // Update therapist status
             const updateTherapistQuery = `
                 UPDATE therapists 
-                SET status = 'rejected', rejection_reason = ?, reviewed_at = NOW(), reviewed_by = ?
+                SET status = 'rejected', reject_reason = ?
                 WHERE id = ?
             `;
-            await connection.execute(updateTherapistQuery, [reason, reviewedBy, therapistId]);
+            await connection.execute(updateTherapistQuery, [reason, therapistId]);
 
             // Update request status
             const updateRequestQuery = `
@@ -212,16 +213,17 @@ class TherapistModel {
 
             // Get therapist details for notifications
             const therapist = await this.getTherapistById(therapistId);
+            const therapistName = therapist.name || `${therapist.first_name || ''} ${therapist.last_name || ''}`.trim();
 
             // Log activity
             await this.logActivity(connection, 'therapist', therapistId, 'rejected',
-                `Therapist rejected: ${therapist.name}. Reason: ${reason}`, 'lsa', null, reviewedBy);
+                `Therapist rejected: ${therapistName}. Reason: ${reason}`, 'lsa', null, reviewedBy);
 
             // Create notification for spa
-            await this.createNotification(connection, 'spa', therapist.spa_id,
+            await this.createNotification(connection, 'admin_spa', therapist.spa_id,
                 'Therapist Rejected',
-                `Your therapist ${therapist.name} was rejected. Reason: ${reason}`,
-                'error', 'therapist', therapistId
+                `Your therapist ${therapistName} was rejected. Reason: ${reason}`,
+                'therapist_application', 'therapist', therapistId
             );
 
             await connection.commit();
@@ -252,10 +254,11 @@ class TherapistModel {
 
             // Get therapist details
             const therapist = await this.getTherapistById(therapistId);
+            const therapistName = therapist.name || `${therapist.first_name || ''} ${therapist.last_name || ''}`.trim();
 
             // Log activity
             await this.logActivity(connection, 'therapist', therapistId, 'resigned',
-                `Therapist resigned: ${therapist.name}`, 'spa', spaId, therapist.name);
+                `Therapist resigned: ${therapistName}`, 'spa', spaId, therapistName);
 
             await connection.commit();
         } catch (error) {
@@ -285,11 +288,12 @@ class TherapistModel {
 
             // Get therapist details
             const therapist = await this.getTherapistById(therapistId);
+            const therapistName = therapist.name || `${therapist.first_name || ''} ${therapist.last_name || ''}`.trim();
 
             // Log activity
             await this.logActivity(connection, 'therapist', therapistId, 'terminated',
-                `Therapist terminated: ${therapist.name}${reason ? '. Reason: ' + reason : ''}`,
-                'spa', spaId, therapist.name);
+                `Therapist terminated: ${therapistName}${reason ? '. Reason: ' + reason : ''}`,
+                'spa', spaId, therapistName);
 
             await connection.commit();
         } catch (error) {
@@ -361,12 +365,12 @@ class TherapistModel {
     }
 
     // Helper method to create notifications
-    static async createNotification(connection, recipientType, recipientId, title, message, type = 'info', relatedEntityType = null, relatedEntityId = null) {
+    static async createNotification(connection, recipientType, recipientId, title, message, notificationType = 'system_alert', relatedEntityType = null, relatedEntityId = null) {
         const query = `
-            INSERT INTO system_notifications (recipient_type, recipient_id, title, message, type, related_entity_type, related_entity_id)
+            INSERT INTO system_notifications (recipient_type, recipient_id, title, message, notification_type, related_entity_type, related_entity_id)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         `;
-        await connection.execute(query, [recipientType, recipientId, title, message, type, relatedEntityType, relatedEntityId]);
+        await connection.execute(query, [recipientType, recipientId, title, message, notificationType, relatedEntityType, relatedEntityId]);
     }
 
     // Get admin statistics for dashboard

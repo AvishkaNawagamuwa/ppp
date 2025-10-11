@@ -9,7 +9,7 @@ const Navbar = () => {
   const [isMembershipOpen, setIsMembershipOpen] = useState(false);
   const [isTopVisible, setIsTopVisible] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  
+
   // Refs for dropdown containers
   const aboutDropdownRef = useRef(null);
   const membershipDropdownRef = useRef(null);
@@ -20,7 +20,7 @@ const Navbar = () => {
   // Handle scroll to hide top bar and change navbar background
   useEffect(() => {
     let lastScrollY = window.scrollY;
-    
+
     const handleScroll = () => {
       // For main navbar background change
       if (window.scrollY > 50) {
@@ -28,14 +28,14 @@ const Navbar = () => {
       } else {
         setIsScrolled(false);
       }
-      
+
       // For top info bar
       if (window.scrollY > 100 && window.scrollY > lastScrollY) {
         setIsTopVisible(false);
       } else {
         setIsTopVisible(true);
       }
-      
+
       lastScrollY = window.scrollY;
     };
 
@@ -46,19 +46,19 @@ const Navbar = () => {
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (aboutDropdownRef.current && 
-          !aboutDropdownRef.current.contains(event.target) && 
-          !aboutButtonRef.current?.contains(event.target)) {
+      if (aboutDropdownRef.current &&
+        !aboutDropdownRef.current.contains(event.target) &&
+        !aboutButtonRef.current?.contains(event.target)) {
         setIsAboutOpen(false);
       }
-      if (membershipDropdownRef.current && 
-          !membershipDropdownRef.current.contains(event.target) &&
-          !membershipButtonRef.current?.contains(event.target)) {
+      if (membershipDropdownRef.current &&
+        !membershipDropdownRef.current.contains(event.target) &&
+        !membershipButtonRef.current?.contains(event.target)) {
         setIsMembershipOpen(false);
       }
-      if (mobileMenuRef.current && 
-          !mobileMenuRef.current.contains(event.target) &&
-          !document.querySelector('.mobile-menu-button')?.contains(event.target)) {
+      if (mobileMenuRef.current &&
+        !mobileMenuRef.current.contains(event.target) &&
+        !document.querySelector('.mobile-menu-button')?.contains(event.target)) {
         setIsMobileMenuOpen(false);
       }
     };
@@ -72,14 +72,14 @@ const Navbar = () => {
   // Function to handle dropdown hover with delay for better UX
   const handleDropdownHover = (dropdown, isOpen) => {
     if (!isOpen) return;
-    
+
     setTimeout(() => {
-      if (dropdown === 'about' && !aboutDropdownRef.current?.matches(':hover') && 
-          !aboutButtonRef.current?.matches(':hover')) {
+      if (dropdown === 'about' && !aboutDropdownRef.current?.matches(':hover') &&
+        !aboutButtonRef.current?.matches(':hover')) {
         setIsAboutOpen(false);
       }
-      if (dropdown === 'membership' && !membershipDropdownRef.current?.matches(':hover') && 
-          !membershipButtonRef.current?.matches(':hover')) {
+      if (dropdown === 'membership' && !membershipDropdownRef.current?.matches(':hover') &&
+        !membershipButtonRef.current?.matches(':hover')) {
         setIsMembershipOpen(false);
       }
     }, 150);
@@ -124,7 +124,7 @@ const Navbar = () => {
               <span>Mon - Sat: 9:00 AM - 6:00 PM</span>
             </div>
           </div>
-          
+
           <div className="flex space-x-4">
             <a href="#" className="text-white hover:text-gold-500 transition-colors duration-300">
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -156,9 +156,9 @@ const Navbar = () => {
           <div className="flex justify-between items-center py-3">
             {/* Logo with navigation */}
             <div className="flex items-center cursor-pointer" onClick={() => navigateTo('/')}>
-              <img 
-                src={assets.logo_trans} 
-                alt="Lanka Spa Association" 
+              <img
+                src={assets.logo_trans}
+                alt="Lanka Spa Association"
                 className={`h-20 md:h-20 w-auto transition-all duration-300 ${isScrolled ? '' : ''}`}
                 onError={(e) => {
                   e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjYwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iNjAiIGZpbGw9IiMwQTE0MjgiLz48dGV4dCB4PSIxMCIgeT0iMzUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxOCIgZmlsbD0iI0Q0QUYzNyI+TEFOS0EgU1BBIEFTU09DLjwvdGV4dD48L3N2Zz4=';
@@ -168,17 +168,17 @@ const Navbar = () => {
 
             {/* Desktop Navigation Links */}
             <div className="hidden md:flex items-center space-x-8">
-              <button 
+              <button
                 onClick={() => navigateTo('/')}
                 className={`${isScrolled ? 'text-white' : 'text-[#0A1428]'} hover:text-gold-500 font-medium transition-colors duration-300 py-2 relative group`}
               >
                 Home
                 <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gold-500 transition-all duration-300 group-hover:w-full"></span>
               </button>
-              
+
               {/* About Us with dropdown */}
               <div className="relative">
-                <button 
+                <button
                   ref={aboutButtonRef}
                   className={`${isScrolled ? 'text-white' : 'text-[#0A1428]'} hover:text-gold-500 font-medium transition-colors duration-300 py-2 flex items-center relative group`}
                   onMouseEnter={() => setIsAboutOpen(true)}
@@ -191,29 +191,29 @@ const Navbar = () => {
                   </svg>
                   <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gold-500 transition-all duration-300 group-hover:w-full"></span>
                 </button>
-                
+
                 {isAboutOpen && (
-                  <div 
+                  <div
                     ref={aboutDropdownRef}
                     className="absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg py-2 z-50 border border-gray-100"
                     onMouseEnter={() => setIsAboutOpen(true)}
                     onMouseLeave={() => setIsAboutOpen(false)}
                   >
-                    <button 
+                    <button
                       onClick={() => navigateTo('/about')}
                       className="block w-full text-left px-4 py-2 text-sm text-[#0A1428] hover:bg-[#0A1428] hover:text-white transition-all duration-200 flex items-center"
                     >
                       <span className="w-1 h-1 bg-gold-500 rounded-full mr-2"></span>
                       About the LSA
                     </button>
-                    <button 
+                    <button
                       onClick={() => navigateTo('/leader-board')}
                       className="block w-full text-left px-4 py-2 text-sm text-[#0A1428] hover:bg-[#0A1428] hover:text-white transition-all duration-200 flex items-center"
                     >
                       <span className="w-1 h-1 bg-gold-500 rounded-full mr-2"></span>
                       Leader Board
                     </button>
-                    <button 
+                    <button
                       onClick={() => navigateTo('/standards')}
                       className="block w-full text-left px-4 py-2 text-sm text-[#0A1428] hover:bg-[#0A1428] hover:text-white transition-all duration-200 flex items-center"
                     >
@@ -223,10 +223,10 @@ const Navbar = () => {
                   </div>
                 )}
               </div>
-              
+
               {/* Membership with dropdown */}
               <div className="relative">
-                <button 
+                <button
                   ref={membershipButtonRef}
                   className={`${isScrolled ? 'text-white' : 'text-[#0A1428]'} hover:text-gold-500 font-medium transition-colors duration-300 py-2 flex items-center relative group`}
                   onMouseEnter={() => setIsMembershipOpen(true)}
@@ -239,22 +239,22 @@ const Navbar = () => {
                   </svg>
                   <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gold-500 transition-all duration-300 group-hover:w-full"></span>
                 </button>
-                
+
                 {isMembershipOpen && (
-                  <div 
+                  <div
                     ref={membershipDropdownRef}
                     className="absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg py-2 z-50 border border-gray-100"
                     onMouseEnter={() => setIsMembershipOpen(true)}
                     onMouseLeave={() => setIsMembershipOpen(false)}
                   >
-                    <button 
+                    <button
                       onClick={() => navigateTo('/membership-instructions')}
                       className="block w-full text-left px-4 py-2 text-sm text-[#0A1428] hover:bg-[#0A1428] hover:text-white transition-all duration-200 flex items-center"
                     >
                       <span className="w-1 h-1 bg-gold-500 rounded-full mr-2"></span>
                       Instructions
                     </button>
-                    <button 
+                    <button
                       onClick={() => navigateTo('/registration')}
                       className="block w-full text-left px-4 py-2 text-sm text-[#0A1428] hover:bg-[#0A1428] hover:text-white transition-all duration-200 flex items-center"
                     >
@@ -264,8 +264,8 @@ const Navbar = () => {
                   </div>
                 )}
               </div>
-              
-              <button 
+
+              <button
                 onClick={() => navigateTo('/blogs')}
                 className={`${isScrolled ? 'text-white' : 'text-[#0A1428]'} hover:text-gold-500 font-medium transition-colors duration-300 py-2 relative group`}
               >
@@ -273,39 +273,58 @@ const Navbar = () => {
                 <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gold-500 transition-all duration-300 group-hover:w-full"></span>
               </button>
 
-              <button 
+              <button
                 onClick={() => navigateTo('/gallery')}
                 className={`${isScrolled ? 'text-white' : 'text-[#0A1428]'} hover:text-gold-500 font-medium transition-colors duration-300 py-2 relative group`}
               >
                 Gallery
                 <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gold-500 transition-all duration-300 group-hover:w-full"></span>
               </button>
-              
-              <button 
+
+              <button
                 onClick={() => navigateTo('/contact')}
                 className={`${isScrolled ? 'text-white' : 'text-[#0A1428]'} hover:text-gold-500 font-medium transition-colors duration-300 py-2 relative group`}
               >
                 Contact Us
                 <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gold-500 transition-all duration-300 group-hover:w-full"></span>
               </button>
-              
-              <button 
+
+              <button
                 onClick={() => navigateTo('/login')}
                 className="bg-gold-500 text-[#0A1428] hover:bg-gold-600 font-medium px-4 py-2 rounded-md transition-all duration-300 transform hover:scale-105 shadow-md"
               >
                 Login
               </button>
+
+              <button
+                onClick={() => navigateTo('/third-party-login')}
+                className={`${isScrolled ? 'bg-transparent border-2 border-gold-500 text-gold-500 hover:bg-gold-500 hover:text-[#0A1428]' : 'bg-[#0A1428] text-gold-500 hover:bg-[#001122] border-2 border-[#0A1428]'} font-medium px-4 py-2 rounded-md transition-all duration-300 transform hover:scale-105 shadow-md flex items-center`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                Government Officer
+              </button>
             </div>
 
             {/* Mobile menu button */}
             <div className="md:hidden flex items-center">
-              <button 
+              <button
                 onClick={() => navigateTo('/login')}
-                className="bg-gold-500 text-[#0A1428] hover:bg-gold-600 font-medium px-3 py-1.5 rounded-md transition-all duration-300 mr-3 text-sm"
+                className="bg-gold-500 text-[#0A1428] hover:bg-gold-600 font-medium px-2 py-1.5 rounded-md transition-all duration-300 mr-1 text-xs"
               >
                 Login
               </button>
-              <button 
+              <button
+                onClick={() => navigateTo('/third-party-login')}
+                className="bg-[#0A1428] text-gold-500 hover:bg-[#001122] font-medium px-2 py-1.5 rounded-md transition-all duration-300 mr-2 text-xs flex items-center"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                Gov
+              </button>
+              <button
                 className={`mobile-menu-button ${isScrolled ? 'text-white' : 'text-[#0A1428]'} focus:outline-none`}
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               >
@@ -324,19 +343,19 @@ const Navbar = () => {
 
           {/* Mobile menu */}
           {isMobileMenuOpen && (
-            <div 
+            <div
               ref={mobileMenuRef}
               className="md:hidden bg-white border-t border-gray-200 mt-2 py-3 rounded-b-lg shadow-lg"
             >
-              <button 
+              <button
                 onClick={() => handleMobileLinkClick('/')}
                 className="block w-full text-left py-2 px-4 text-[#0A1428] hover:bg-[#0A1428] hover:text-white transition-all duration-200"
               >
                 Home
               </button>
-              
+
               <div className="border-t border-gray-100">
-                <button 
+                <button
                   className="w-full flex justify-between items-center py-2 px-4 text-[#0A1428] hover:bg-[#0A1428] hover:text-white transition-all duration-200"
                   onClick={() => setIsAboutOpen(!isAboutOpen)}
                 >
@@ -345,22 +364,22 @@ const Navbar = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
-                
+
                 {isAboutOpen && (
                   <div className="pl-6 bg-gray-50">
-                    <button 
+                    <button
                       onClick={() => handleMobileLinkClick('/about')}
                       className="block w-full text-left py-2 px-4 text-sm text-[#0A1428] hover:bg-[#0A1428] hover:text-white transition-all duration-200"
                     >
                       About the LSA
                     </button>
-                    <button 
+                    <button
                       onClick={() => handleMobileLinkClick('/leader-board')}
                       className="block w-full text-left py-2 px-4 text-sm text-[#0A1428] hover:bg-[#0A1428] hover:text-white transition-all duration-200"
                     >
                       Leader Board
                     </button>
-                    <button 
+                    <button
                       onClick={() => handleMobileLinkClick('/standards')}
                       className="block w-full text-left py-2 px-4 text-sm text-[#0A1428] hover:bg-[#0A1428] hover:text-white transition-all duration-200"
                     >
@@ -369,9 +388,9 @@ const Navbar = () => {
                   </div>
                 )}
               </div>
-              
+
               <div className="border-t border-gray-100">
-                <button 
+                <button
                   className="w-full flex justify-between items-center py-2 px-4 text-[#0A1428] hover:bg-[#0A1428] hover:text-white transition-all duration-200"
                   onClick={() => setIsMembershipOpen(!isMembershipOpen)}
                 >
@@ -380,16 +399,16 @@ const Navbar = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
-                
+
                 {isMembershipOpen && (
                   <div className="pl-6 bg-gray-50">
-                    <button 
+                    <button
                       onClick={() => handleMobileLinkClick('/membership-instructions')}
                       className="block w-full text-left py-2 px-4 text-sm text-[#0A1428] hover:bg-[#0A1428] hover:text-white transition-all duration-200"
                     >
                       Instructions
                     </button>
-                    <button 
+                    <button
                       onClick={() => handleMobileLinkClick('/registration')}
                       className="block w-full text-left py-2 px-4 text-sm text-[#0A1428] hover:bg-[#0A1428] hover:text-white transition-all duration-200"
                     >
@@ -398,9 +417,9 @@ const Navbar = () => {
                   </div>
                 )}
               </div>
-              
+
               <div className="border-t border-gray-100">
-                <button 
+                <button
                   onClick={() => handleMobileLinkClick('/blogs')}
                   className="block w-full text-left py-2 px-4 text-[#0A1428] hover:bg-[#0A1428] hover:text-white transition-all duration-200"
                 >
@@ -409,20 +428,32 @@ const Navbar = () => {
               </div>
 
               <div className="border-t border-gray-100">
-                <button 
+                <button
                   onClick={() => handleMobileLinkClick('/gallery')}
                   className="block w-full text-left py-2 px-4 text-[#0A1428] hover:bg-[#0A1428] hover:text-white transition-all duration-200"
                 >
                   Gallery
                 </button>
               </div>
-              
+
               <div className="border-t border-gray-100">
-                <button 
+                <button
                   onClick={() => handleMobileLinkClick('/contact')}
                   className="block w-full text-left py-2 px-4 text-[#0A1428] hover:bg-[#0A1428] hover:text-white transition-all duration-200"
                 >
                   Contact Us
+                </button>
+              </div>
+
+              <div className="border-t border-gray-100">
+                <button
+                  onClick={() => handleMobileLinkClick('/third-party-login')}
+                  className="block w-full text-left py-2 px-4 text-[#0A1428] hover:bg-[#0A1428] hover:text-white transition-all duration-200 flex items-center"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  Government Officer Login
                 </button>
               </div>
             </div>

@@ -11,10 +11,12 @@ import BlogDisplay from './components/BlogDisplay';
 import Media from './pages/Blog';
 import Gallery from "./pages/Gallery";
 import Registration from "./pages/Registration";
+import RegistrationSuccess from "./pages/RegistrationSuccess";
 import Contact from "./pages/Contact";
 import TestNotifications from "./pages/TestNotifications";
 import ThirdPartyDashboard from "./pages/ThirdPartyDashboard";
 import ThirdPartyLogin from "./pages/ThirdPartyLogin";
+import Login from "./pages/Login";
 
 function App() {
   const [count, setCount] = useState(0);
@@ -33,6 +35,7 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/gallery" element={<Gallery />} />
         <Route path="/registration" element={<Registration />} />
+        <Route path="/registration-success" element={<RegistrationSuccess />} />
         <Route path="/contact" element={<Contact />} />
 
         <Route path="/blogs" element={<BlogDisplay />} />
@@ -43,6 +46,7 @@ function App() {
             <AdminSPA />
           </SpaContextProvider>
         } />
+        <Route path="/login" element={<Login />} />
         <Route path="/test-notifications" element={<TestNotifications />} />
         <Route path="/third-party-dashboard" element={<ThirdPartyDashboard />} />
         <Route path="/third-party-login" element={<ThirdPartyLogin />} />

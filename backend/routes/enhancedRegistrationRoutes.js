@@ -8,6 +8,23 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 
+// Helper functions for credential generation
+function generateRandomPassword(length = 12) {
+    const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+    let password = '';
+    for (let i = 0; i < length; i++) {
+        password += charset.charAt(Math.floor(Math.random() * charset.length));
+    }
+    return password;
+}
+
+function generateUsername(spaName, referenceNumber) {
+    // Create username from spa name (first 3-4 letters) + reference number suffix
+    const cleanSpaName = spaName.toLowerCase().replace(/[^a-z]/g, '').substring(0, 4);
+    const refSuffix = referenceNumber.replace('LSA', '').padStart(4, '0');
+    return cleanSpaName + refSuffix;
+}
+
 // Enhanced multer configuration for new file requirements
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
@@ -295,14 +312,18 @@ router.post('/submit', upload.fields([
             console.log(`   ✅ Bank Slip: ${filePaths.bankSlip || 'Not uploaded'} (saved to payments table)`);
         }
 
-        // Create admin user for spa (for future spa dashboard access)
-        const hashedPassword = await bcrypt.hash('temp123', 10); // Temporary password
+        // Generate unique login credentials for spa owner
+        const uniqueUsername = generateUsername(spaName, referenceNumber);
+        const uniquePassword = generateRandomPassword(12);
+        const hashedPassword = await bcrypt.hash(uniquePassword, 10);
+
+        // Create admin user for spa dashboard access
         await connection.execute(`
       INSERT INTO admin_users (
         username, email, password_hash, role, spa_id, full_name, phone
       ) VALUES (?, ?, ?, 'admin_spa', ?, ?, ?)
     `, [
-            `spa_${referenceNumber.toLowerCase()}`,
+            uniqueUsername,
             email,
             hashedPassword,
             spaId,
@@ -333,58 +354,40 @@ router.post('/submit', upload.fields([
 
         // Transaction removed for testing
 
-        // Send email notifications
-        try {
-            // Email to spa owner
-            await transporter.sendMail({
-                from: process.env.EMAIL_USER || 'lsa@example.com',
-                to: email,
-                subject: 'LSA Registration Received - ' + referenceNumber,
-                html: `
-          <h2>Lanka Spa Association - Registration Confirmation</h2>
-          <p>Dear ${firstName} ${lastName},</p>
-          <p>Thank you for registering <strong>${spaName}</strong> with the Lanka Spa Association.</p>
-          <p><strong>Your Reference Number:</strong> ${referenceNumber}</p>
-          <p><strong>Payment Status:</strong> ${paymentMethod === 'card' ? 'Completed' : 'Pending Bank Transfer Approval'}</p>
-          <p>Your registration is currently under review. We will notify you once the verification process is complete.</p>
-          <p>Best regards,<br>Lanka Spa Association</p>
-        `
-            });
-
-            // Email to admin
-            await transporter.sendMail({
-                from: process.env.EMAIL_USER || 'lsa@example.com',
-                to: 'admin@lsa.gov.lk',
-                subject: 'New Spa Registration - ' + referenceNumber,
-                html: `
-          <h2>New Spa Registration</h2>
-          <p><strong>Spa:</strong> ${spaName}</p>
-          <p><strong>Owner:</strong> ${firstName} ${lastName}</p>
-          <p><strong>Reference:</strong> ${referenceNumber}</p>
-          <p><strong>Payment Method:</strong> ${paymentMethod}</p>
-          <p>Please review the registration in the AdminLSA dashboard.</p>
-        `
-            });
-        } catch (emailError) {
-            console.error('Email sending failed:', emailError);
-            // Don't fail the registration if email fails
-        }
+        // Log credentials to console for easy reference (no email needed)
+        console.log('\n' + '='.repeat(60));
+        console.log('🔐 SPA LOGIN CREDENTIALS GENERATED');
+        console.log('='.repeat(60));
+        console.log(`👤 Owner: ${firstName} ${lastName}`);
+        console.log(`🏢 Spa: ${spaName}`);
+        console.log(`📋 Reference: ${referenceNumber}`);
+        console.log(`🔑 Username: ${uniqueUsername}`);
+        console.log(`🔒 Password: ${uniquePassword}`);
+        console.log(`🌐 Login URL: http://localhost:5173/login`);
+        console.log('='.repeat(60) + '\n');
 
         res.status(201).json({
             success: true,
             message: paymentMethod === 'card'
-                ? 'Registration completed successfully!'
-                : 'Registration submitted! Please complete the bank transfer and wait for approval.',
+                ? 'Registration completed successfully! Your login credentials are ready.'
+                : 'Registration submitted! Your login credentials are ready. Please complete the bank transfer.',
             data: {
                 referenceNumber,
                 spaId,
+                spaName: spaName,
+                ownerName: `${firstName} ${lastName}`,
                 paymentReference: paymentRef,
                 status: 'pending',
                 paymentStatus: paymentStatus,
-                loginCredentials: {
-                    username: `spa_${referenceNumber.toLowerCase()}`,
-                    temporaryPassword: 'temp123',
-                    loginUrl: '/admin-spa'
+                credentials: {
+                    username: uniqueUsername,
+                    password: uniquePassword,
+                    note: 'Please save these credentials securely'
+                },
+                loginInfo: {
+                    message: 'Use these credentials to access your spa dashboard',
+                    loginUrl: 'http://localhost:5173/login',
+                    note: 'You can change your password after logging in'
                 }
             }
         });

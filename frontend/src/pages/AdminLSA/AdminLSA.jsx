@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   HomeIcon,
   BuildingOfficeIcon,
@@ -23,7 +24,9 @@ import {
   ChevronRightIcon,
   ChatBubbleLeftEllipsisIcon,
   ArrowPathIcon,
-  CreditCardIcon
+  CreditCardIcon,
+  ArrowDownTrayIcon,
+  UserCircleIcon
 } from '@heroicons/react/24/outline';
 import {
   FiHome,
@@ -46,6 +49,7 @@ import ManageSpas from './ManageSpas';
 import ManageTherapists from './ManageTherapists';
 
 const AdminLSA = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [notifications, setNotifications] = useState([]);
@@ -59,7 +63,7 @@ const AdminLSA = () => {
 
   // Initialize Socket.io connection for LSA
   useEffect(() => {
-    const newSocket = io('http://localhost:5000');
+    const newSocket = io('http://localhost:3001');
 
     newSocket.emit('join_lsa');
 
@@ -181,11 +185,31 @@ const AdminLSA = () => {
   });
 
   // API base URL
-  const API_BASE = 'http://localhost:5000/api';
+  const API_BASE = 'http://localhost:3001/api';
+
+  // Simple headers without authentication
+  const getHeaders = () => {
+    return {
+      'Content-Type': 'application/json'
+    };
+  };
 
   // Notification system state
   const [lastNotificationCheck, setLastNotificationCheck] = useState(Date.now());
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+  // Financial management states
+  const [financialData, setFinancialData] = useState({
+    totalRegistration: 0,
+    totalAnnual: 0,
+    monthlyData: [],
+    summary: {}
+  });
+  const [paymentHistory, setPaymentHistory] = useState([]);
+  const [bankTransfers, setBankTransfers] = useState([]);
+  const [selectedPayment, setSelectedPayment] = useState(null);
+  const [financialTab, setFinancialTab] = useState('overview');
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   // Show new therapist notification
   const showNewTherapistNotification = (count) => {
@@ -242,7 +266,7 @@ const AdminLSA = () => {
   const loadNotificationHistory = async () => {
     try {
       setLoading(true);
-      
+
       // Build query parameters based on filters
       const params = new URLSearchParams({
         limit: notificationFilters.limit,
@@ -254,11 +278,11 @@ const AdminLSA = () => {
       console.log('📊 Loading notification history with filters:', notificationFilters);
 
       const response = await axios.get(`${API_BASE}/lsa/notifications/history?${params.toString()}`);
-      
+
       if (response.data.success) {
         setNotificationHistory(response.data.data);
         console.log(`✅ Loaded ${response.data.data.length} notification history records`);
-        
+
         // Also load summary
         await loadNotificationSummary();
       } else {
@@ -285,7 +309,7 @@ const AdminLSA = () => {
   const loadNotificationSummary = async () => {
     try {
       const response = await axios.get(`${API_BASE}/lsa/notifications/summary`);
-      
+
       if (response.data.success) {
         setNotificationSummary(response.data.data);
         console.log('📊 Loaded notification summary statistics');
@@ -355,7 +379,7 @@ const AdminLSA = () => {
     try {
       setLoading(true);
 
-      const response = await axios.post(`${API_BASE}/lsa/therapists/${selectedTherapist.therapist_id}/reject`, {
+      const response = await axios.post(`${API_BASE}/lsa/therapists/${selectedTherapist.id || selectedTherapist.therapist_id}/reject`, {
         reason: rejectionReason
       });
 
@@ -696,6 +720,177 @@ const AdminLSA = () => {
     }
   };
 
+  // Financial data functions
+  const loadFinancialData = async (year = selectedYear) => {
+    try {
+      setLoading(true);
+      console.log('🔄 Loading financial data for year:', year);
+
+      const response = await axios.get(`${API_BASE}/lsa/enhanced/financial/monthly?year=${year}`);
+
+      console.log('📥 Financial API response:', response.data);
+
+      if (response.data.success) {
+        setFinancialData(response.data.data);
+        setError(''); // Clear any previous errors
+        console.log('✅ Financial data loaded successfully');
+      } else {
+        setError('API returned unsuccessful response');
+        console.log('❌ API returned unsuccessful response:', response.data);
+      }
+    } catch (error) {
+      console.error('❌ Error loading financial data:', error);
+      setError(`Failed to load financial data: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadPaymentHistory = async () => {
+    try {
+      setLoading(true);
+      console.log('🔄 Loading payment history...');
+
+      const response = await axios.get(`${API_BASE}/lsa/enhanced/payments/history`);
+
+      if (response.data.success) {
+        setPaymentHistory(response.data.data);
+        setError(''); // Clear any previous errors
+        console.log('✅ Payment history loaded:', response.data.data.length, 'records');
+      }
+    } catch (error) {
+      console.error('❌ Error loading payment history:', error);
+      setError('Failed to load payment history');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadBankTransfers = async () => {
+    try {
+      setLoading(true);
+      console.log('🔄 Loading bank transfers...');
+
+      const response = await axios.get(`${API_BASE}/lsa/enhanced/payments/bank-transfers`);
+
+      if (response.data.success) {
+        setBankTransfers(response.data.data);
+        setError(''); // Clear any previous errors
+        console.log('✅ Bank transfers loaded:', response.data.data.length, 'records');
+      }
+    } catch (error) {
+      console.error('❌ Error loading bank transfers:', error);
+      setError('Failed to load bank transfers');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const approveBankTransfer = async (paymentId, notes = '') => {
+    try {
+      setLoading(true);
+      const response = await axios.post(`${API_BASE}/lsa/enhanced/payments/${paymentId}/approve`, {
+        notes
+      });
+
+      if (response.data.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Payment Approved',
+          text: 'Bank transfer has been approved successfully',
+          timer: 2000
+        });
+
+        // Refresh data
+        await loadBankTransfers();
+        await loadPaymentHistory();
+        await loadFinancialData();
+      }
+    } catch (error) {
+      console.error('Error approving bank transfer:', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Failed to approve bank transfer'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const rejectBankTransfer = async (paymentId, reason) => {
+    try {
+      setLoading(true);
+      const response = await axios.post(`${API_BASE}/lsa/enhanced/payments/${paymentId}/reject`, {
+        reason
+      });
+
+      if (response.data.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Payment Rejected',
+          text: 'Bank transfer has been rejected',
+          timer: 2000
+        });
+
+        // Refresh data
+        await loadBankTransfers();
+        await loadPaymentHistory();
+      }
+    } catch (error) {
+      console.error('Error rejecting bank transfer:', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Failed to reject bank transfer'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle logout function
+  const handleLogout = () => {
+    Swal.fire({
+      title: 'Confirm Logout',
+      text: 'Are you sure you want to logout from AdminLSA Dashboard?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#0A1428',
+      cancelButtonColor: '#6B7280',
+      confirmButtonText: 'Yes, Logout',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true
+    }).then((result) => {
+      if (result.isConfirmed) {
+        // Clear authentication data
+        localStorage.removeItem('userData');
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('userRole');
+
+        // Disconnect socket if connected
+        if (socket) {
+          socket.disconnect();
+        }
+
+        // Show success message
+        Swal.fire({
+          title: 'Logged Out Successfully',
+          text: 'You have been logged out from AdminLSA Dashboard',
+          icon: 'success',
+          confirmButtonColor: '#0A1428',
+          timer: 1500,
+          showConfirmButton: false
+        });
+
+        // Navigate to home page
+        setTimeout(() => {
+          navigate('/');
+        }, 1000);
+      }
+    });
+  };
+
   useEffect(() => {
     if (activeTab === 'dashboard') {
       loadDashboardData();
@@ -703,12 +898,20 @@ const AdminLSA = () => {
       loadSpas();
     } else if (activeTab === 'therapists') {
       loadTherapists();
+    } else if (activeTab === 'financial') {
+      if (financialTab === 'overview') {
+        loadFinancialData();
+      } else if (financialTab === 'history') {
+        loadPaymentHistory();
+      } else if (financialTab === 'approvals') {
+        loadBankTransfers();
+      }
     } else if (activeTab === 'third-party') {
       loadGovernmentOfficers();
     } else if (activeTab === 'notifications') {
       loadNotificationHistory();
     }
-  }, [activeTab, spaFilters, therapistTab, searchQuery, notificationFilters]);
+  }, [activeTab, spaFilters, therapistTab, searchQuery, notificationFilters, financialTab, selectedYear]);
 
   // Real-time notification polling
   useEffect(() => {
@@ -749,6 +952,22 @@ const AdminLSA = () => {
       return () => clearTimeout(timer);
     }
   }, [error, success]);
+
+  // Load financial data when financial tab changes
+  useEffect(() => {
+    console.log('💳 Financial tab effect triggered:', { activeTab, financialTab, selectedYear });
+
+    if (activeTab === 'financial' && financialTab) {
+      console.log('🎯 Loading financial data for tab:', financialTab);
+      if (financialTab === 'overview') {
+        loadFinancialData();
+      } else if (financialTab === 'history') {
+        loadPaymentHistory();
+      } else if (financialTab === 'approvals') {
+        loadBankTransfers();
+      }
+    }
+  }, [activeTab, financialTab, selectedYear]);
 
   // Navigation items
   const navItems = [
@@ -1064,7 +1283,7 @@ const AdminLSA = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {therapists.filter(t => t.status === therapistTab).map((therapist) => (
-                <tr key={therapist.therapist_id} className="hover:bg-gray-50">
+                <tr key={therapist.id || therapist.therapist_id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">
                       {therapist.first_name} {therapist.last_name}
@@ -1102,7 +1321,7 @@ const AdminLSA = () => {
                       {therapist.status === 'pending' && (
                         <>
                           <button
-                            onClick={() => handleTherapistAction(therapist.therapist_id, 'approve')}
+                            onClick={() => handleTherapistAction(therapist.id || therapist.therapist_id, 'approve')}
                             className="text-green-600 hover:text-green-900"
                             title="Approve"
                           >
@@ -1273,9 +1492,9 @@ const AdminLSA = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Entity Type</label>
-            <select 
+            <select
               value={notificationFilters.type}
-              onChange={(e) => setNotificationFilters({...notificationFilters, type: e.target.value})}
+              onChange={(e) => setNotificationFilters({ ...notificationFilters, type: e.target.value })}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500"
             >
               <option value="all">All Types</option>
@@ -1285,9 +1504,9 @@ const AdminLSA = () => {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-            <select 
+            <select
               value={notificationFilters.status}
-              onChange={(e) => setNotificationFilters({...notificationFilters, status: e.target.value})}
+              onChange={(e) => setNotificationFilters({ ...notificationFilters, status: e.target.value })}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500"
             >
               <option value="all">All Statuses</option>
@@ -1302,9 +1521,9 @@ const AdminLSA = () => {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Limit</label>
-            <select 
+            <select
               value={notificationFilters.limit}
-              onChange={(e) => setNotificationFilters({...notificationFilters, limit: e.target.value})}
+              onChange={(e) => setNotificationFilters({ ...notificationFilters, limit: e.target.value })}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-500"
             >
               <option value="50">50 Records</option>
@@ -1314,7 +1533,7 @@ const AdminLSA = () => {
             </select>
           </div>
           <div className="flex items-end">
-            <button 
+            <button
               onClick={loadNotificationHistory}
               className="w-full bg-[#0A1428] text-white px-4 py-2 rounded-lg hover:bg-[#0A1428]/90"
             >
@@ -1352,44 +1571,41 @@ const AdminLSA = () => {
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start space-x-4">
-                    <div className={`w-3 h-3 rounded-full mt-3 flex-shrink-0 ${
-                      notification.entity_type === 'therapist' ? 
-                        (notification.status === 'approved' ? 'bg-green-500' :
-                         notification.status === 'rejected' ? 'bg-red-500' :
-                         notification.status === 'pending' ? 'bg-yellow-500' :
-                         notification.status === 'resigned' ? 'bg-orange-500' :
-                         notification.status === 'terminated' ? 'bg-red-700' :
-                         'bg-blue-500') :
-                        (notification.status === 'verified' ? 'bg-green-500' :
-                         notification.status === 'rejected' ? 'bg-red-500' :
-                         notification.status === 'pending' ? 'bg-yellow-500' :
-                         notification.status === 'blacklisted' ? 'bg-red-800' :
-                         'bg-blue-500')
-                    }`}></div>
+                    <div className={`w-3 h-3 rounded-full mt-3 flex-shrink-0 ${notification.entity_type === 'therapist' ?
+                      (notification.status === 'approved' ? 'bg-green-500' :
+                        notification.status === 'rejected' ? 'bg-red-500' :
+                          notification.status === 'pending' ? 'bg-yellow-500' :
+                            notification.status === 'resigned' ? 'bg-orange-500' :
+                              notification.status === 'terminated' ? 'bg-red-700' :
+                                'bg-blue-500') :
+                      (notification.status === 'verified' ? 'bg-green-500' :
+                        notification.status === 'rejected' ? 'bg-red-500' :
+                          notification.status === 'pending' ? 'bg-yellow-500' :
+                            notification.status === 'blacklisted' ? 'bg-red-800' :
+                              'bg-blue-500')
+                      }`}></div>
                     <div className="flex-1">
                       <div className="flex items-center space-x-2">
                         <h4 className="text-lg font-medium text-gray-900">
                           {notification.action_title}
                         </h4>
-                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                          notification.entity_type === 'therapist' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
-                        }`}>
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${notification.entity_type === 'therapist' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                          }`}>
                           {notification.entity_type.toUpperCase()}
                         </span>
-                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                          notification.status === 'approved' || notification.status === 'verified' ? 'bg-green-100 text-green-800' :
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${notification.status === 'approved' || notification.status === 'verified' ? 'bg-green-100 text-green-800' :
                           notification.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                          notification.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                          notification.status === 'resigned' ? 'bg-orange-100 text-orange-800' :
-                          notification.status === 'terminated' ? 'bg-red-200 text-red-900' :
-                          notification.status === 'blacklisted' ? 'bg-red-200 text-red-900' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
+                            notification.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                              notification.status === 'resigned' ? 'bg-orange-100 text-orange-800' :
+                                notification.status === 'terminated' ? 'bg-red-200 text-red-900' :
+                                  notification.status === 'blacklisted' ? 'bg-red-200 text-red-900' :
+                                    'bg-gray-100 text-gray-800'
+                          }`}>
                           {notification.status.toUpperCase()}
                         </span>
                       </div>
                       <p className="text-gray-600 mt-1">{notification.action_message}</p>
-                      
+
                       {/* Entity Details */}
                       <div className="mt-3 p-3 bg-gray-50 rounded-lg">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
@@ -1412,7 +1628,7 @@ const AdminLSA = () => {
                             </div>
                           )}
                         </div>
-                        
+
                         {/* Additional Details */}
                         {notification.rejection_reason && (
                           <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
@@ -1420,14 +1636,14 @@ const AdminLSA = () => {
                             <span className="ml-2 text-red-900">{notification.rejection_reason}</span>
                           </div>
                         )}
-                        
+
                         {notification.termination_reason && (
                           <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
                             <strong className="text-red-700">Termination Reason:</strong>
                             <span className="ml-2 text-red-900">{notification.termination_reason}</span>
                           </div>
                         )}
-                        
+
                         {notification.reviewed_by && (
                           <div className="mt-2 text-sm">
                             <strong className="text-gray-700">Reviewed by:</strong>
@@ -1435,7 +1651,7 @@ const AdminLSA = () => {
                           </div>
                         )}
                       </div>
-                      
+
                       <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
                         <span className="flex items-center">
                           <ClockIcon className="w-4 h-4 mr-1" />
@@ -1486,9 +1702,9 @@ const AdminLSA = () => {
               <p className="text-sm text-gray-600">
                 Showing {notificationHistory.length} records
               </p>
-              <button 
+              <button
                 onClick={() => {
-                  setNotificationFilters({...notificationFilters, limit: String(parseInt(notificationFilters.limit) + 100)});
+                  setNotificationFilters({ ...notificationFilters, limit: String(parseInt(notificationFilters.limit) + 100) });
                   loadNotificationHistory();
                 }}
                 className="text-yellow-600 hover:text-yellow-800 font-medium text-sm"
@@ -1637,21 +1853,79 @@ const AdminLSA = () => {
   );
 
   // Financial Overview Component
-  const renderFinancialOverview = () => (
-    <div>
-      <div className="mb-6 flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Financial Overview</h1>
-          <p className="text-gray-600 mt-2">Total revenue, monthly tracking, and financial reports</p>
+  const renderFinancialOverview = () => {
+    return (
+      <div>
+        <div className="mb-6 flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Financial Overview</h1>
+            <p className="text-gray-600 mt-2">Total revenue, monthly tracking, and financial reports</p>
+          </div>
+          <div className="flex gap-3">
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              className="border border-gray-300 rounded-lg px-3 py-2 bg-white"
+            >
+              {[2024, 2025, 2026].map(year => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => {
+                loadFinancialData();
+                loadPaymentHistory();
+                loadBankTransfers();
+              }}
+              className="bg-[#0A1428] text-white px-4 py-2 rounded-lg hover:bg-[#0A1428]/90 transition-colors"
+              disabled={loading}
+            >
+              {loading ? 'Loading...' : 'Refresh Data'}
+            </button>
+          </div>
         </div>
-        <button
-          onClick={() => window.location.reload()}
-          className="bg-[#0A1428] text-white px-4 py-2 rounded-lg hover:bg-[#0A1428]/90 transition-colors"
-        >
-          Refresh Data
-        </button>
-      </div>
 
+        {/* Financial Tabs */}
+        <div className="mb-6">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              {[
+                { id: 'overview', label: 'Overview', icon: CreditCardIcon },
+                { id: 'history', label: 'Payment History', icon: DocumentIcon },
+                { id: 'approvals', label: 'Bank Transfer Approvals', icon: CheckIcon }
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setFinancialTab(tab.id)}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center ${financialTab === tab.id
+                    ? 'border-[#FFD700] text-[#001F3F]'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                >
+                  <tab.icon className="w-4 h-4 mr-2" />
+                  {tab.label}
+                  {tab.id === 'approvals' && bankTransfers.length > 0 && (
+                    <span className="ml-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                      {bankTransfers.length}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </nav>
+          </div>
+        </div>
+
+        {/* Financial Content */}
+        {financialTab === 'overview' && renderFinancialOverviewContent()}
+        {financialTab === 'history' && renderPaymentHistory()}
+        {financialTab === 'approvals' && renderBankTransferApprovals()}
+      </div>
+    );
+  };
+
+  // Financial Overview Content Component
+  const renderFinancialOverviewContent = () => (
+    <div>
       {/* Financial Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div className="bg-white p-6 rounded-lg shadow-sm border border-[#001F3F]">
@@ -1661,8 +1935,10 @@ const AdminLSA = () => {
             </div>
             <div className="ml-4">
               <h3 className="text-sm font-medium text-[#001F3F]">Total Registration Fee Paid</h3>
-              <p className="text-3xl font-bold text-[#FFD700]">LKR 2,450,000</p>
-              <div className="text-xs text-gray-500 mt-1">This year</div>
+              <p className="text-3xl font-bold text-[#FFD700]">
+                LKR {financialData.summary?.total_registration?.toLocaleString() || '0'}
+              </p>
+              <div className="text-xs text-gray-500 mt-1">Year {selectedYear}</div>
             </div>
           </div>
         </div>
@@ -1673,9 +1949,11 @@ const AdminLSA = () => {
               <CreditCardIcon className="w-8 h-8 text-[#001F3F]" />
             </div>
             <div className="ml-4">
-              <h3 className="text-sm font-medium text-[#001F3F]">Total Membership Paid</h3>
-              <p className="text-3xl font-bold text-[#FFD700]">LKR 1,890,000</p>
-              <div className="text-xs text-gray-500 mt-1">This year</div>
+              <h3 className="text-sm font-medium text-[#001F3F]">Total Annual Fee Paid</h3>
+              <p className="text-3xl font-bold text-[#FFD700]">
+                LKR {financialData.summary?.total_annual?.toLocaleString() || '0'}
+              </p>
+              <div className="text-xs text-gray-500 mt-1">Year {selectedYear}</div>
             </div>
           </div>
         </div>
@@ -1685,7 +1963,7 @@ const AdminLSA = () => {
       <div className="bg-white rounded-lg shadow-sm border p-6 mb-8">
         <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
           <ArrowPathIcon className="mr-2 text-[#FFD700] w-5 h-5" />
-          Monthly Financial Overview - 2025
+          Monthly Financial Overview - {selectedYear}
         </h3>
         <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
           <div className="text-center text-gray-500">
@@ -1700,7 +1978,7 @@ const AdminLSA = () => {
       {/* Monthly Financial Table */}
       <div className="bg-white rounded-lg shadow-sm border">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-800">Monthly Breakdown</h3>
+          <h3 className="text-lg font-semibold text-gray-800">Monthly Breakdown - {selectedYear}</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -1708,26 +1986,386 @@ const AdminLSA = () => {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Month</th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Registration Fees (LKR)</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Membership Fees (LKR)</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Annual Fees (LKR)</th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Total (LKR)</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {[
-                { month: 'January 2025', registration: 245000, membership: 189000 },
-                { month: 'February 2025', registration: 298000, membership: 203000 },
-                { month: 'March 2025', registration: 267000, membership: 195000 },
-                { month: 'April 2025', registration: 289000, membership: 210000 },
-                { month: 'May 2025', registration: 312000, membership: 225000 },
-                { month: 'June 2025', registration: 278000, membership: 198000 },
-              ].map((row, index) => (
-                <tr key={index} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{row.month}</td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{row.registration.toLocaleString()}</td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{row.membership.toLocaleString()}</td>
-                  <td className="px-6 py-4 text-sm font-medium text-[#FFD700]">{(row.registration + row.membership).toLocaleString()}</td>
+              {financialData.monthly_data?.length > 0 ? (
+                financialData.monthly_data.map((row, index) => {
+                  const monthName = new Date(selectedYear, row.month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                  const registration = parseFloat(row.registration_fees) || 0;
+                  const annual = parseFloat(row.annual_fees) || 0;
+                  const total = registration + annual;
+
+                  return (
+                    <tr key={index} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{monthName}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{registration.toLocaleString()}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{annual.toLocaleString()}</td>
+                      <td className="px-6 py-4 text-sm font-medium text-[#FFD700]">{total.toLocaleString()}</td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
+                    {loading ? 'Loading financial data...' : 'No financial data available for this year'}
+                  </td>
                 </tr>
-              ))}
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Payment History Component
+  const renderPaymentHistory = () => (
+    <div>
+      <div className="bg-white rounded-lg shadow-sm border">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800">Payment History</h3>
+            <p className="text-sm text-gray-600 mt-1">Complete payment records with details</p>
+          </div>
+          <div className="flex gap-2">
+            <select
+              className="border border-gray-300 rounded px-3 py-1 text-sm"
+              onChange={(e) => {
+                // Filter by payment type
+                // Implementation can be added here
+              }}
+            >
+              <option value="">All Types</option>
+              <option value="registration">Registration</option>
+              <option value="annual">Annual Fee</option>
+              <option value="monthly">Monthly Fee</option>
+            </select>
+            <select
+              className="border border-gray-300 rounded px-3 py-1 text-sm"
+              onChange={(e) => {
+                // Filter by status
+                // Implementation can be added here
+              }}
+            >
+              <option value="">All Status</option>
+              <option value="completed">Completed</option>
+              <option value="pending">Pending</option>
+              <option value="failed">Failed</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Spa Details</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Type</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Method</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {paymentHistory.length > 0 ? (
+                paymentHistory.map((payment) => (
+                  <tr key={payment.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{payment.spa_name}</div>
+                      <div className="text-sm text-gray-500">{payment.spa_reference}</div>
+                      <div className="text-sm text-gray-500">{payment.owner_fname} {payment.owner_lname}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${payment.payment_type === 'registration' ? 'bg-blue-100 text-blue-800' :
+                        payment.payment_type === 'annual' ? 'bg-green-100 text-green-800' :
+                          'bg-purple-100 text-purple-800'
+                        }`}>
+                        {payment.payment_type ? payment.payment_type.charAt(0).toUpperCase() + payment.payment_type.slice(1) : 'Unknown'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      LKR {parseFloat(payment.amount).toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${payment.payment_method === 'card' ? 'bg-indigo-100 text-indigo-800' :
+                        'bg-orange-100 text-orange-800'
+                        }`}>
+                        {payment.payment_method === 'card' ? 'Card Payment' : 'Bank Transfer'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${payment.status === 'completed' ? 'bg-green-100 text-green-800' :
+                        payment.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                        {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
+                      </span>
+                      {payment.payment_method === 'bank_transfer' && (
+                        <div className="text-xs text-gray-500 mt-1">{payment.approval_status}</div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(payment.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <button
+                        onClick={() => setSelectedPayment(payment)}
+                        className="text-[#001F3F] hover:text-[#FFD700] text-sm font-medium"
+                      >
+                        View Details
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                    {loading ? 'Loading payment history...' : 'No payment history found'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Payment Details Modal Component
+  const renderPaymentDetailsModal = () => {
+    if (!selectedPayment) return null;
+
+    return (
+      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-bold text-gray-900">Payment Details</h3>
+            <button
+              onClick={() => setSelectedPayment(null)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <XMarkIcon className="w-6 h-6" />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {/* Spa Information */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-2">Spa Information</h4>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500">Name:</span>
+                  <p className="font-medium">{selectedPayment.spa_name}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Reference:</span>
+                  <p className="font-medium">{selectedPayment.spa_reference}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Owner:</span>
+                  <p className="font-medium">{selectedPayment.owner_fname} {selectedPayment.owner_lname}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Email:</span>
+                  <p className="font-medium">{selectedPayment.owner_email}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Information */}
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-2">Payment Information</h4>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500">Amount:</span>
+                  <p className="font-medium text-lg">LKR {parseFloat(selectedPayment.amount).toLocaleString()}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Type:</span>
+                  <p className="font-medium">{selectedPayment.payment_type.charAt(0).toUpperCase() + selectedPayment.payment_type.slice(1)}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Method:</span>
+                  <p className="font-medium">{selectedPayment.payment_method === 'card' ? 'Card Payment' : 'Bank Transfer'}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Status:</span>
+                  <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${selectedPayment.payment_status === 'completed' ? 'bg-green-100 text-green-800' :
+                    selectedPayment.payment_status === 'pending_approval' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                    {selectedPayment.payment_status?.replace('_', ' ').toUpperCase()}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Reference Number:</span>
+                  <p className="font-medium">{selectedPayment.reference_number}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Date:</span>
+                  <p className="font-medium">{new Date(selectedPayment.created_at).toLocaleDateString()}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Bank Transfer Details */}
+            {selectedPayment.payment_method === 'bank_transfer' && (
+              <div className="bg-orange-50 p-4 rounded-lg">
+                <h4 className="font-medium text-gray-900 mb-2">Bank Transfer Details</h4>
+                <div className="text-sm">
+                  {selectedPayment.bank_slip_path && (
+                    <div className="mb-2">
+                      <span className="text-gray-500">Bank Slip:</span>
+                      <button
+                        onClick={() => window.open(selectedPayment.bank_slip_path, '_blank')}
+                        className="ml-2 text-blue-600 hover:text-blue-800 underline"
+                      >
+                        View Bank Slip
+                      </button>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-gray-500">Approval Status:</span>
+                    <p className="font-medium">{selectedPayment.approval_status}</p>
+                  </div>
+                  {selectedPayment.approved_at && (
+                    <div>
+                      <span className="text-gray-500">Approved Date:</span>
+                      <p className="font-medium">{new Date(selectedPayment.approved_at).toLocaleDateString()}</p>
+                    </div>
+                  )}
+                  {selectedPayment.rejection_reason && (
+                    <div>
+                      <span className="text-gray-500">Rejection Reason:</span>
+                      <p className="font-medium text-red-600">{selectedPayment.rejection_reason}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6 flex justify-end">
+            <button
+              onClick={() => setSelectedPayment(null)}
+              className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Bank Transfer Approvals Component  
+  const renderBankTransferApprovals = () => (
+    <div>
+      <div className="bg-white rounded-lg shadow-sm border">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800">Bank Transfer Approvals</h3>
+              <p className="text-sm text-gray-600 mt-1">Review and approve bank transfer payments</p>
+            </div>
+            {bankTransfers.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <span className="text-red-600 font-medium text-sm">
+                  {bankTransfers.length} pending approval{bankTransfers.length > 1 ? 's' : ''}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Spa Details</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Details</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bank Slip</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Submitted</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {bankTransfers.length > 0 ? (
+                bankTransfers.map((payment) => (
+                  <tr key={payment.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{payment.spa_name}</div>
+                      <div className="text-sm text-gray-500">{payment.reference_number}</div>
+                      <div className="text-sm text-gray-500">{payment.owner_fname} {payment.owner_lname}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">LKR {parseFloat(payment.amount).toLocaleString()}</div>
+                      <div className="text-sm text-gray-500">
+                        {payment.payment_type.charAt(0).toUpperCase() + payment.payment_type.slice(1)} Fee
+                      </div>
+                      <div className="text-sm text-gray-500">Ref: {payment.reference_number}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {payment.bank_slip_path ? (
+                        <button
+                          onClick={() => window.open(payment.bank_slip_path, '_blank')}
+                          className="text-blue-600 hover:text-blue-800 text-sm underline"
+                        >
+                          View Bank Slip
+                        </button>
+                      ) : (
+                        <span className="text-gray-400 text-sm">No slip uploaded</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(payment.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => approveBankTransfer(payment.id)}
+                          className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 transition-colors"
+                          disabled={loading}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => {
+                            Swal.fire({
+                              title: 'Reject Payment',
+                              text: 'Enter rejection reason:',
+                              input: 'textarea',
+                              inputPlaceholder: 'Reason for rejection...',
+                              showCancelButton: true,
+                              confirmButtonText: 'Reject',
+                              confirmButtonColor: '#d33',
+                            }).then((result) => {
+                              if (result.isConfirmed && result.value) {
+                                rejectBankTransfer(payment.id, result.value);
+                              }
+                            });
+                          }}
+                          className="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600 transition-colors"
+                          disabled={loading}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                    {loading ? 'Loading bank transfer requests...' : 'No pending bank transfer approvals'}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -1809,6 +2447,27 @@ const AdminLSA = () => {
             })}
           </ul>
         </nav>
+
+        {/* Logout Button */}
+        <div className="p-3 border-t border-gray-700">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center px-3 py-3 rounded-lg text-gray-300 hover:bg-red-600 hover:text-white transition-all duration-300 group"
+            title={!isSidebarOpen ? "Logout" : ""}
+          >
+            <FiLogOut className="w-5 h-5 flex-shrink-0" />
+            <span className={`ml-3 transition-all duration-300 ${!isSidebarOpen ? 'opacity-0 absolute' : 'opacity-100'}`}>
+              Logout
+            </span>
+
+            {/* Tooltip for minimized state */}
+            {!isSidebarOpen && (
+              <span className="absolute left-14 ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap z-50">
+                Logout
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Main Content */}
@@ -1859,8 +2518,34 @@ const AdminLSA = () => {
                 </button>
               </div>
 
-              <div className="text-sm text-gray-600">
-                LSA Admin Panel
+              {/* User Profile Dropdown */}
+              <div className="relative group">
+                <div className="flex items-center space-x-3 cursor-pointer">
+                  <div className="text-right">
+                    <div className="text-sm font-medium text-gray-700">LSA Admin</div>
+                    <div className="text-xs text-gray-500">Administrator</div>
+                  </div>
+                  <div className="w-10 h-10 bg-gradient-to-r from-[#0A1428] to-[#FFD700] rounded-full flex items-center justify-center text-white font-bold shadow-lg">
+                    A
+                  </div>
+                </div>
+
+                {/* Dropdown Menu */}
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                  <div className="py-2">
+                    <div className="px-4 py-2 border-b border-gray-100">
+                      <p className="text-sm font-medium text-gray-700">Signed in as</p>
+                      <p className="text-sm text-gray-500 truncate">admin@lankaspa.lk</p>
+                    </div>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors duration-200 flex items-center"
+                    >
+                      <FiLogOut className="mr-2 h-4 w-4" />
+                      Sign Out
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1974,7 +2659,7 @@ const AdminLSA = () => {
                     {selectedTherapist.first_name} {selectedTherapist.last_name}
                   </h2>
                   <p className="text-sm text-gray-500 mt-1">
-                    Registration ID: #TH{String(selectedTherapist.therapist_id).padStart(4, '0')}
+                    Registration ID: #TH{String(selectedTherapist.id || selectedTherapist.therapist_id).padStart(4, '0')}
                   </p>
                 </div>
                 <div className="flex items-center space-x-3">
@@ -2048,42 +2733,155 @@ const AdminLSA = () => {
                     </div>
                   </div>
 
-                  {/* Attachments */}
+                  {/* Documents */}
                   <div className="bg-green-50 rounded-lg p-4">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                       <DocumentIcon className="w-5 h-5 mr-2" />
                       Documents
                     </h3>
                     <div className="space-y-3">
+                      {/* NIC Attachment */}
                       <div className="flex items-center justify-between p-3 bg-white rounded border">
                         <div className="flex items-center">
                           <DocumentIcon className="w-6 h-6 text-blue-500 mr-3" />
-                          <span className="font-medium">NIC Copy</span>
+                          <span className="font-medium">NIC Attachment</span>
                         </div>
-                        <span className={`px-2 py-1 rounded text-xs ${selectedTherapist.nic_attachment ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                          {selectedTherapist.nic_attachment ? 'Uploaded' : 'Missing'}
-                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className={`px-2 py-1 rounded text-xs ${selectedTherapist.nic_attachment ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            {selectedTherapist.nic_attachment ? 'Available' : 'Not provided'}
+                          </span>
+                          {selectedTherapist.nic_attachment && (
+                            <div className="flex space-x-1">
+                              <button
+                                onClick={() => window.open(`${API_BASE}/lsa/therapists/${selectedTherapist.id}/document/nic_attachment?action=view`, '_blank')}
+                                className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                                title="View Document"
+                              >
+                                <EyeIcon className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const link = document.createElement('a');
+                                  link.href = `${API_BASE}/lsa/therapists/${selectedTherapist.id}/document/nic_attachment?action=download`;
+                                  link.download = `therapist_${selectedTherapist.id}_nic_attachment`;
+                                  link.click();
+                                }}
+                                className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
+                                title="Download Document"
+                              >
+                                <ArrowDownTrayIcon className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Medical Certificate */}
                       <div className="flex items-center justify-between p-3 bg-white rounded border">
                         <div className="flex items-center">
                           <DocumentIcon className="w-6 h-6 text-green-500 mr-3" />
                           <span className="font-medium">Medical Certificate</span>
                         </div>
-                        <span className={`px-2 py-1 rounded text-xs ${selectedTherapist.medical_certificate ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                          {selectedTherapist.medical_certificate ? 'Uploaded' : 'Missing'}
-                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className={`px-2 py-1 rounded text-xs ${selectedTherapist.medical_certificate ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            {selectedTherapist.medical_certificate ? 'Available' : 'Not provided'}
+                          </span>
+                          {selectedTherapist.medical_certificate && (
+                            <div className="flex space-x-1">
+                              <button
+                                onClick={() => window.open(`${API_BASE}/lsa/therapists/${selectedTherapist.id}/document/medical_certificate?action=view`, '_blank')}
+                                className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                                title="View Document"
+                              >
+                                <EyeIcon className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const link = document.createElement('a');
+                                  link.href = `${API_BASE}/lsa/therapists/${selectedTherapist.id}/document/medical_certificate?action=download`;
+                                  link.download = `therapist_${selectedTherapist.id}_medical_certificate`;
+                                  link.click();
+                                }}
+                                className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
+                                title="Download Document"
+                              >
+                                <ArrowDownTrayIcon className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
+
+                      {/* SPA Center Certificate */}
                       <div className="flex items-center justify-between p-3 bg-white rounded border">
                         <div className="flex items-center">
                           <DocumentIcon className="w-6 h-6 text-purple-500 mr-3" />
-                          <span className="font-medium">Profile Photo</span>
+                          <span className="font-medium">SPA Certificate</span>
                         </div>
-                        <span className={`px-2 py-1 rounded text-xs ${selectedTherapist.profile_photo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                          {selectedTherapist.profile_photo ? 'Uploaded' : 'Missing'}
-                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className={`px-2 py-1 rounded text-xs ${selectedTherapist.spa_center_certificate ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            {selectedTherapist.spa_center_certificate ? 'Available' : 'Not provided'}
+                          </span>
+                          {selectedTherapist.spa_center_certificate && (
+                            <div className="flex space-x-1">
+                              <button
+                                onClick={() => window.open(`${API_BASE}/lsa/therapists/${selectedTherapist.id}/document/spa_center_certificate?action=view`, '_blank')}
+                                className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                                title="View Document"
+                              >
+                                <EyeIcon className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const link = document.createElement('a');
+                                  link.href = `${API_BASE}/lsa/therapists/${selectedTherapist.id}/document/spa_center_certificate?action=download`;
+                                  link.download = `therapist_${selectedTherapist.id}_spa_certificate`;
+                                  link.click();
+                                }}
+                                className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
+                                title="Download Document"
+                              >
+                                <ArrowDownTrayIcon className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Therapist Image */}
+                      <div className="flex items-center justify-between p-3 bg-white rounded border">
+                        <div className="flex items-center">
+                          <UserCircleIcon className="w-6 h-6 text-orange-500 mr-3" />
+                          <span className="font-medium">Therapist Image</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className={`px-2 py-1 rounded text-xs ${selectedTherapist.therapist_image ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            {selectedTherapist.therapist_image ? 'Available' : 'Not provided'}
+                          </span>
+                          {selectedTherapist.therapist_image && (
+                            <div className="flex space-x-1">
+                              <button
+                                onClick={() => window.open(`${API_BASE}/lsa/therapists/${selectedTherapist.id}/document/therapist_image?action=view`, '_blank')}
+                                className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                                title="View Image"
+                              >
+                                <EyeIcon className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const link = document.createElement('a');
+                                  link.href = `${API_BASE}/lsa/therapists/${selectedTherapist.id}/document/therapist_image?action=download`;
+                                  link.download = `therapist_${selectedTherapist.id}_image`;
+                                  link.click();
+                                }}
+                                className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
+                                title="Download Image"
+                              >
+                                <ArrowDownTrayIcon className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2104,7 +2902,7 @@ const AdminLSA = () => {
                       <div className="flex space-x-3">
                         <button
                           onClick={() => {
-                            handleTherapistAction(selectedTherapist.therapist_id, 'approve');
+                            handleTherapistAction(selectedTherapist.id || selectedTherapist.therapist_id, 'approve');
                             setShowTherapistModal(false);
                           }}
                           disabled={loading}
@@ -2282,7 +3080,7 @@ const AdminLSA = () => {
                     if (selectedSpa) {
                       verifySpa(selectedSpa.spa_id, 'reject', rejectionReason);
                     } else if (selectedTherapist) {
-                      handleTherapistAction(selectedTherapist.therapist_id, 'reject', rejectionReason);
+                      handleTherapistAction(selectedTherapist.id || selectedTherapist.therapist_id, 'reject', rejectionReason);
                     }
                   }}
                   disabled={!rejectionReason.trim()}
@@ -2371,6 +3169,9 @@ const AdminLSA = () => {
           </div>
         </div>
       )}
+
+      {/* Payment Details Modal */}
+      {renderPaymentDetailsModal()}
     </div>
   );
 };

@@ -12,7 +12,7 @@ const TestNotifications = () => {
 
     useEffect(() => {
         // Initialize Socket.io connection
-        const newSocket = io('http://localhost:5000');
+        const newSocket = io('http://localhost:3001');
 
         newSocket.on('connect', () => {
             console.log('Connected to server');
@@ -72,7 +72,7 @@ const TestNotifications = () => {
 
     const loadTherapists = async () => {
         try {
-            const response = await axios.get('http://localhost:5000/api/lsa/therapists');
+            const response = await axios.get('http://localhost:3001/api/lsa/therapists');
             if (response.data.success) {
                 setTherapists(response.data.data);
             }
@@ -88,7 +88,7 @@ const TestNotifications = () => {
         }
 
         try {
-            const response = await axios.put(`http://localhost:5000/api/lsa/therapists/${selectedTherapistId}/approve`, {
+            const response = await axios.put(`http://localhost:3001/api/lsa/therapists/${selectedTherapistId}/approve`, {
                 admin_comments: 'Test approval'
             });
 
@@ -109,7 +109,7 @@ const TestNotifications = () => {
         }
 
         try {
-            const response = await axios.put(`http://localhost:5000/api/lsa/therapists/${selectedTherapistId}/reject`, {
+            const response = await axios.put(`http://localhost:3001/api/lsa/therapists/${selectedTherapistId}/reject`, {
                 rejection_reason: 'Test rejection',
                 admin_comments: 'Test rejection'
             });
@@ -203,8 +203,8 @@ const TestNotifications = () => {
                                 <div
                                     key={notification.id}
                                     className={`p-4 rounded-lg border-l-4 ${notification.type === 'new_registration'
-                                            ? 'bg-blue-50 border-blue-500'
-                                            : 'bg-green-50 border-green-500'
+                                        ? 'bg-blue-50 border-blue-500'
+                                        : 'bg-green-50 border-green-500'
                                         }`}
                                 >
                                     <div className="flex justify-between items-start">
@@ -260,8 +260,8 @@ const TestNotifications = () => {
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${therapist.status === 'approved' ? 'bg-green-100 text-green-800' :
-                                                        therapist.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                                                            'bg-yellow-100 text-yellow-800'
+                                                    therapist.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                                                        'bg-yellow-100 text-yellow-800'
                                                     }`}>
                                                     {therapist.status}
                                                 </span>

@@ -28,14 +28,37 @@ const SpaProfile = () => {
             setLoading(true);
             setError(null);
 
-            // For demo purposes, using spa_id = 1. In production, get from JWT token or session
-            const spaId = 1;
+            // Get spa_id from logged-in user data
+            const userData = localStorage.getItem('user');
+            if (!userData) {
+                setError('User not logged in');
+                return;
+            }
 
-            const response = await fetch(`/api/admin-spa-new/spa-profile/${spaId}`);
+            const user = JSON.parse(userData);
+            const spaId = user.spa_id;
+
+            if (!spaId) {
+                setError('No spa associated with this user');
+                return;
+            }
+
+            console.log('Fetching SPA profile for spa_id:', spaId);
+            const response = await fetch(`/api/spa/profile/${spaId}`);
             const result = await response.json();
 
             if (result.success && result.data) {
-                setSpaData(result.data);
+                // Map the API response fields to component expected fields
+                const mappedData = {
+                    spa_name: result.data.name,
+                    owner_name: `${result.data.owner_fname || ''} ${result.data.owner_lname || ''}`.trim(),
+                    email: result.data.email,
+                    phone: result.data.phone,
+                    address: result.data.address,
+                    district: 'N/A' // Not available in current API
+                };
+                setSpaData(mappedData);
+                console.log('Mapped spa data:', mappedData);
             } else {
                 setError(result.error || 'Failed to load SPA profile');
                 Swal.fire({

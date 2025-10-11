@@ -22,7 +22,7 @@ const Blog = () => {
     const fetchBlogs = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch('http://localhost:5000/api/blog');
+        const response = await fetch('http://localhost:3001/api/blog');
         if (response.ok) {
           const data = await response.json();
           setBlogs(data);
@@ -131,7 +131,7 @@ const Blog = () => {
   // Function to get full URL for media files
   const getMediaUrl = (path) => {
     if (path.startsWith('http')) return path;
-    return `http://localhost:5000${path}`;
+    return `http://localhost:3001${path}`;
   };
 
   // Format date

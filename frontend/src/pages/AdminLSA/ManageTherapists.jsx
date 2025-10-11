@@ -54,9 +54,8 @@ const ManageTherapists = () => {
 
             // Try API first, but fallback to mock data if API fails
             try {
-                const response = await axios.get('http://localhost:5000/api/therapists/admin/all', {
-                    headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-                    timeout: 3000
+                const response = await axios.get('http://localhost:3001/api/lsa/therapists', {
+                    timeout: 5000
                 });
                 if (response.data.success && response.data.data.therapists.length > 0) {
                     setTherapists(response.data.data.therapists || []);
@@ -270,7 +269,7 @@ const ManageTherapists = () => {
 
     const handleViewDetails = async (therapist) => {
         try {
-            const response = await axios.get(`http://localhost:5000/api/therapists/admin/${therapist.id}`, {
+            const response = await axios.get(`http://localhost:3001/api/therapists/admin/${therapist.id}`, {
                 headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
             });
             if (response.data.success) {
@@ -300,10 +299,8 @@ const ManageTherapists = () => {
             });
 
             if (result.isConfirmed) {
-                await axios.put(`http://localhost:5000/api/therapists/admin/${therapistId}/approve`, {
-                    reviewed_by: 'AdminLSA'
-                }, {
-                    headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                await axios.put(`http://localhost:3001/api/lsa/therapists/${therapistId}/approve`, {
+                    admin_comments: 'Approved by AdminLSA'
                 });
 
                 Swal.fire({
@@ -343,11 +340,9 @@ const ManageTherapists = () => {
             });
 
             if (result.isConfirmed) {
-                await axios.put(`http://localhost:5000/api/therapists/admin/${therapistId}/reject`, {
-                    reason: result.value,
-                    reviewed_by: 'AdminLSA'
-                }, {
-                    headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                await axios.put(`http://localhost:3001/api/lsa/therapists/${therapistId}/reject`, {
+                    rejection_reason: result.value,
+                    admin_comments: 'Rejected by AdminLSA'
                 });
 
                 Swal.fire({
@@ -505,15 +500,15 @@ const ManageTherapists = () => {
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
                                     className={`flex-1 px-6 py-4 text-center border-b-2 font-medium text-sm transition-colors ${activeTab === tab.id
-                                            ? `border-${tab.color}-500 text-${tab.color}-600 bg-${tab.color}-50`
-                                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        ? `border-${tab.color}-500 text-${tab.color}-600 bg-${tab.color}-50`
+                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                         }`}
                                 >
                                     <div className="flex items-center justify-center space-x-2">
                                         <span>{tab.label}</span>
                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${activeTab === tab.id
-                                                ? `bg-${tab.color}-100 text-${tab.color}-800`
-                                                : 'bg-gray-100 text-gray-600'
+                                            ? `bg-${tab.color}-100 text-${tab.color}-800`
+                                            : 'bg-gray-100 text-gray-600'
                                             }`}>
                                             {tab.count}
                                         </span>
@@ -675,11 +670,13 @@ const ManageTherapists = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-500">Full Name</label>
-                                        <p className="mt-1 text-sm text-gray-900">{selectedTherapist.fname} {selectedTherapist.lname}</p>
+                                        <p className="mt-1 text-sm text-gray-900">
+                                            {selectedTherapist.name || `${selectedTherapist.first_name || selectedTherapist.fname || ''} ${selectedTherapist.last_name || selectedTherapist.lname || ''}`.trim() || 'N/A'}
+                                        </p>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-500">NIC</label>
-                                        <p className="mt-1 text-sm text-gray-900">{selectedTherapist.nic}</p>
+                                        <p className="mt-1 text-sm text-gray-900">{selectedTherapist.nic || selectedTherapist.nic_number || 'N/A'}</p>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-500">Email</label>
@@ -687,15 +684,22 @@ const ManageTherapists = () => {
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-500">Phone</label>
-                                        <p className="mt-1 text-sm text-gray-900">{selectedTherapist.telno}</p>
+                                        <p className="mt-1 text-sm text-gray-900">{selectedTherapist.phone || selectedTherapist.telno || 'N/A'}</p>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-500">Birthday</label>
-                                        <p className="mt-1 text-sm text-gray-900">{selectedTherapist.birthday || 'N/A'}</p>
+                                        <p className="mt-1 text-sm text-gray-900">
+                                            {selectedTherapist.date_of_birth ?
+                                                new Date(selectedTherapist.date_of_birth).toLocaleDateString() :
+                                                selectedTherapist.birthday || 'N/A'
+                                            }
+                                        </p>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-500">Specialty</label>
-                                        <p className="mt-1 text-sm text-gray-900">{selectedTherapist.specialty || 'N/A'}</p>
+                                        <p className="mt-1 text-sm text-gray-900">
+                                            {selectedTherapist.specialization || selectedTherapist.specialty || 'N/A'}
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -744,23 +748,51 @@ const ManageTherapists = () => {
                                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Documents</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {[
-                                        { label: 'NIC Attachment', path: selectedTherapist.nic_attachment_path },
-                                        { label: 'Medical Certificate', path: selectedTherapist.medical_certificate_path },
-                                        { label: 'Spa Certificate', path: selectedTherapist.spa_certificate_path },
-                                        { label: 'Therapist Image', path: selectedTherapist.therapist_image_path }
+                                        {
+                                            label: 'NIC Attachment',
+                                            path: selectedTherapist.nic_attachment,
+                                            type: 'nic_attachment'
+                                        },
+                                        {
+                                            label: 'Medical Certificate',
+                                            path: selectedTherapist.medical_certificate,
+                                            type: 'medical_certificate'
+                                        },
+                                        {
+                                            label: 'Spa Certificate',
+                                            path: selectedTherapist.spa_center_certificate,
+                                            type: 'spa_center_certificate'
+                                        },
+                                        {
+                                            label: 'Therapist Image',
+                                            path: selectedTherapist.therapist_image,
+                                            type: 'therapist_image'
+                                        }
                                     ].map((doc, index) => (
                                         <div key={index}>
                                             <label className="block text-sm font-medium text-gray-500">{doc.label}</label>
                                             {doc.path ? (
-                                                <a
-                                                    href={`http://localhost:5000${doc.path}`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="mt-1 inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
-                                                >
-                                                    <FiDownload className="w-4 h-4 mr-2" />
-                                                    View Document
-                                                </a>
+                                                <div className="mt-1 flex space-x-2">
+                                                    <button
+                                                        onClick={() => window.open(`http://localhost:3001/api/lsa/therapists/${selectedTherapist.id}/document/${doc.type}?action=view`, '_blank')}
+                                                        className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
+                                                    >
+                                                        <FiEye className="w-4 h-4 mr-1" />
+                                                        View
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            const link = document.createElement('a');
+                                                            link.href = `http://localhost:3001/api/lsa/therapists/${selectedTherapist.id}/document/${doc.type}?action=download`;
+                                                            link.download = `therapist_${selectedTherapist.id}_${doc.type}`;
+                                                            link.click();
+                                                        }}
+                                                        className="inline-flex items-center text-sm text-green-600 hover:text-green-800"
+                                                    >
+                                                        <FiDownload className="w-4 h-4 mr-1" />
+                                                        Download
+                                                    </button>
+                                                </div>
                                             ) : (
                                                 <p className="mt-1 text-sm text-gray-400">Not provided</p>
                                             )}

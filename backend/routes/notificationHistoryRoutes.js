@@ -8,7 +8,7 @@ const db = require('../config/database');
 router.get('/notifications/history', async (req, res) => {
     try {
         const { limit = 100, offset = 0, type = 'all', status = 'all' } = req.query;
-        
+
         let allNotifications = [];
 
         // Get therapist history if requested
@@ -55,15 +55,15 @@ router.get('/notifications/history', async (req, res) => {
                 LEFT JOIN spas s ON t.spa_id = s.id
                 WHERE 1=1
             `;
-            
+
             const therapistParams = [];
             if (status !== 'all') {
                 therapistQuery += ' AND t.status = ?';
                 therapistParams.push(status);
             }
-            
+
             therapistQuery += ' ORDER BY t.updated_at DESC';
-            
+
             const [therapistResults] = await db.execute(therapistQuery, therapistParams);
             allNotifications = allNotifications.concat(therapistResults);
         }
@@ -107,22 +107,22 @@ router.get('/notifications/history', async (req, res) => {
                 FROM spas s
                 WHERE 1=1
             `;
-            
+
             const spaParams = [];
             if (status !== 'all') {
                 spaQuery += ' AND s.status = ?';
                 spaParams.push(status);
             }
-            
+
             spaQuery += ' ORDER BY s.updated_at DESC';
-            
+
             const [spaResults] = await db.execute(spaQuery, spaParams);
             allNotifications = allNotifications.concat(spaResults);
         }
 
         // Sort all notifications by action_date descending
         allNotifications.sort((a, b) => new Date(b.action_date) - new Date(a.action_date));
-        
+
         // Apply pagination
         const total = allNotifications.length;
         const startIndex = parseInt(offset);

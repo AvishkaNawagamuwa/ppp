@@ -34,11 +34,19 @@ const Dashboard = () => {
 
     const fetchDashboardData = async () => {
         try {
+            const token = localStorage.getItem('token');
+            console.log('🔑 Dashboard: Token from localStorage:', token ? 'Present' : 'Missing');
+
             // Fetch dynamic counts from backend
-            const response = await axios.get('/api/admin-spa-new/dashboard-stats');
+            const response = await axios.get('/api/admin-spa-new/dashboard-stats', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
             setDashboardStats(response.data);
         } catch (error) {
             console.error('Error fetching dashboard stats:', error);
+            console.error('Response:', error.response?.data);
             // Set default values if API fails
             setDashboardStats({
                 approved_therapists: 0,
@@ -49,8 +57,13 @@ const Dashboard = () => {
 
     const fetchRecentActivity = async () => {
         try {
+            const token = localStorage.getItem('token');
             // Fetch recent activity for today and yesterday only
-            const response = await axios.get('/api/admin-spa-new/recent-activity');
+            const response = await axios.get('/api/admin-spa-new/recent-activity', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
 
             // Ensure we always get an array
             const activities = Array.isArray(response.data) ? response.data :
@@ -161,8 +174,8 @@ const Dashboard = () => {
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap">
                                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${activity.status === 'approved' ? 'bg-green-100 text-green-800' :
-                                                activity.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                                    'bg-red-100 text-red-800'
+                                            activity.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                                'bg-red-100 text-red-800'
                                             }`}>
                                             {activity.status}
                                         </span>

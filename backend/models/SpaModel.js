@@ -132,19 +132,143 @@ class SpaModel {
         }
     }
 
-    // Get all spas for LSA dashboard
-    static async getAllSpas(status = null) {
-        let query = 'SELECT * FROM spas';
-        const params = [];
+    // Get all spas for LSA dashboard with filtering and pagination
+    static async getAllSpas(filters = {}) {
+        try {
+            let query = `
+                SELECT 
+                    id as spa_id,
+                    name as spa_name,
+                    owner_fname,
+                    owner_lname,
+                    CONCAT(COALESCE(owner_fname, ''), ' ', COALESCE(owner_lname, '')) as owner_name,
+                    email,
+                    phone,
+                    address,
+                    reference_number,
+                    status,
+                    verification_status,
+                    payment_status,
+                    annual_payment_status,
+                    payment_method,
+                    next_payment_date,
+                    blacklist_reason,
+                    blacklisted_at,
+                    blacklisted_by,
+                    certificate_path,
+                    form1_certificate_path,
+                    spa_banner_photos_path,
+                    spa_photos_banner,
+                    spa_photos_banner_path,
+                    nic_front_path,
+                    nic_back_path,
+                    br_attachment_path,
+                    other_document_path,
+                    annual_fee_paid,
+                    created_at,
+                    updated_at,
+                    registration_date
+                FROM spas
+            `;
 
-        if (status) {
-            query += ' WHERE status = ?';
-            params.push(status);
+            const conditions = [];
+            const params = [];
+
+            // Status filter
+            if (filters.status && filters.status !== 'all') {
+                conditions.push('status = ?');
+                params.push(filters.status);
+            }
+
+            // Verification status filter
+            if (filters.verification_status && filters.verification_status !== 'all') {
+                conditions.push('verification_status = ?');
+                params.push(filters.verification_status);
+            }
+
+            // Payment status filter
+            if (filters.payment_status && filters.payment_status !== 'all') {
+                conditions.push('payment_status = ?');
+                params.push(filters.payment_status);
+            }
+
+            // Search filter (name, email, reference number)
+            if (filters.search) {
+                conditions.push('(name LIKE ? OR email LIKE ? OR reference_number LIKE ? OR CONCAT(owner_fname, " ", owner_lname) LIKE ?)');
+                const searchTerm = `%${filters.search}%`;
+                params.push(searchTerm, searchTerm, searchTerm, searchTerm);
+            }
+
+            // Add WHERE clause if conditions exist
+            if (conditions.length > 0) {
+                query += ' WHERE ' + conditions.join(' AND ');
+            }
+
+            // Add ORDER BY
+            query += ' ORDER BY created_at DESC';
+
+            // Add pagination if provided
+            if (filters.limit) {
+                const limit = parseInt(filters.limit) || 10;
+                const offset = filters.page ? (parseInt(filters.page) - 1) * limit : 0;
+                query += ` LIMIT ${limit} OFFSET ${offset}`;
+            }
+
+            const [rows] = await db.execute(query, params);
+
+            // Process JSON fields to extract file paths properly
+            const processedSpas = rows.map(spa => {
+                // Helper function to parse JSON fields and get the first file path
+                const parseJsonField = (field) => {
+                    if (!field) return null;
+                    try {
+                        const parsed = JSON.parse(field);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            return parsed[0]; // Return first file path
+                        }
+                        return field; // Return as is if not JSON array
+                    } catch (e) {
+                        return field; // Return original value if not valid JSON
+                    }
+                };
+
+                return {
+                    ...spa,
+                    // Parse document paths from JSON arrays
+                    form1_certificate_path: parseJsonField(spa.form1_certificate_path),
+                    nic_front_path: parseJsonField(spa.nic_front_path),
+                    nic_back_path: parseJsonField(spa.nic_back_path),
+                    br_attachment_path: parseJsonField(spa.br_attachment_path),
+                    other_document_path: parseJsonField(spa.other_document_path),
+                    spa_banner_photos_path: parseJsonField(spa.spa_banner_photos_path),
+
+                    // Handle spa_photos_banner (for gallery display)
+                    spa_photos_banner: spa.spa_banner_photos_path ? parseJsonField(spa.spa_banner_photos_path) : spa.spa_photos_banner
+                };
+            });
+
+            // Get total count for pagination
+            let totalQuery = 'SELECT COUNT(*) as total FROM spas';
+            if (conditions.length > 0) {
+                totalQuery += ' WHERE ' + conditions.join(' AND ');
+            }
+
+            const [totalResult] = await db.execute(totalQuery, params.slice(0, params.length - (filters.limit ? 0 : 0)));
+            const total = totalResult[0].total;
+
+            return {
+                spas: processedSpas,
+                pagination: {
+                    total,
+                    page: parseInt(filters.page) || 1,
+                    limit: parseInt(filters.limit) || rows.length,
+                    totalPages: filters.limit ? Math.ceil(total / parseInt(filters.limit)) : 1
+                }
+            };
+        } catch (error) {
+            console.error('Error in getAllSpas:', error);
+            throw error;
         }
-
-        query += ' ORDER BY created_at DESC';
-        const [rows] = await db.execute(query, params);
-        return rows;
     }
 
     // Helper method to log activities
